@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+
+# Environment / secrets
+backend/.env
+backend/.env.*
+
+# Uploaded/generated files from local testing
+backend/uploads/*
+
+# Logs
+backend/*.log
+*.log
+
+# OS/editor cruft
+.DS_Store
+.vscode/
