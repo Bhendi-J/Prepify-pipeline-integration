@@ -8,10 +8,16 @@ class Settings(BaseSettings): #centralized application settings loaded from envi
         extra="ignore", #ignore any environment variables we do not explicitly model yet
     )
 
-    DATABASE_URL: str = "postgresql+psycopg://postgres:password@localhost:5432/mydb" #database connection string used by SQLAlchemy
+    DATABASE_URL: str = "postgresql+psycopg://postgres@localhost:5432/mydb" #database connection string used by SQLAlchemy
     REDIS_URL: str | None = None #placeholder for future cache / queue integration
     JWT_SECRET_KEY: str | None = None #placeholder for future token signing
     LLM_API_KEY: str | None = None #placeholder for future LLM provider access
+    EMBEDDING_PROVIDER: str = "local" #use "openai" to call the configured external embedding provider
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSIONS: int = 384
+    HF_TOKEN: str | None = None
+    HUGGINGFACE_PROVIDER: str = "hf-inference"
+    HUGGINGFACE_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 settings = Settings() #single shared settings instance used across the backend

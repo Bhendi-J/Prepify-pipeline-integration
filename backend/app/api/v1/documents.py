@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from uuid import uuid4
+
 import shutil
 from pathlib import Path
-from fastapi import Form
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+
 from app.api.deps import get_current_user
 from app.database import db_session
 from app.models.user import User
 from app.repositories.document_repo import create as create_document, get_by_id, get_by_user_id
 from app.schemas.document import DocumentCreate, DocumentRead
+from app.workers.tasks import process_document
 
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
@@ -22,14 +26,26 @@ def create_document_endpoint(
     source_type: str = Form(...), # ... indicates that the source_type is also expected as form data in the request
     file: UploadFile = File(...),
 ) -> DocumentRead:
+    original_name = Path(file.filename or "upload.txt").name
+    if Path(original_name).suffix.lower() != ".txt":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .txt uploads are supported for now",
+        )
+
     # save the uploaded file to the server
-    file_path = UPLOAD_DIR / file.filename
+    file_path = UPLOAD_DIR / f"{uuid4().hex}_{original_name}"
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
     # create a new document record in the database
-    document_data = DocumentCreate(title=title, source_type=source_type, file_path=str(file_path))
+    document_data = DocumentCreate(
+        title=title,
+        source_type=source_type,
+        file_path=str(file_path),
+    )
     document = create_document(db, document_data, user_id=current_user.id)
+    process_document.delay(document.id)  # enqueue the document processing task
     return document
 
 
@@ -56,4 +72,3 @@ def list_documents(
 ) -> list[DocumentRead]:
     # retrieve all document records for the authenticated user
     return get_by_user_id(db, user_id=current_user.id)
-
