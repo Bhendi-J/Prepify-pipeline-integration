@@ -14,7 +14,11 @@ class Chunk(Base):
         nullable=False,
         index=True,
     )
-    topic_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    topic_id: Mapped[int | None] = mapped_column(
+        ForeignKey("topics.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(), nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -19,6 +19,11 @@ class Document(Base): #defining the documents table for application data
         nullable=False,
         index=True)
 
+    topic_id: Mapped[int | None] = mapped_column(
+        ForeignKey("topics.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True)
+
     
     title: Mapped[str] = mapped_column(
         String(255), 

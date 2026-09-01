@@ -1,17 +1,17 @@
 from datetime import datetime
-from typing import Optional
-
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 
 class DocumentCreate(BaseModel): #payload used when creating a new document
     title: str = Field(max_length=255)
     source_type: str = Field(max_length=100)
     file_path: str = Field(max_length=255)
+    topic_id: int | None = None
 
 class DocumentRead(BaseModel): #public document representation returned to clients
     id: int
     user_id: int
+    topic_id: int | None
     title: str
     source_type: str
     file_path: str
@@ -22,6 +22,6 @@ class DocumentRead(BaseModel): #public document representation returned to clien
 
 
 class DocumentUpdate(BaseModel): #payload used when updating a document's status
-    status: Optional[str] = Field(default=None, max_length=50)  
-    title: Optional[str] = Field(default=None, max_length=255)
-    
+    status: str | None = Field(default=None, max_length=50)
+    title: str | None = Field(default=None, max_length=255)
+    topic_id: int | None = None

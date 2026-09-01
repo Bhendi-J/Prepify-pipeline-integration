@@ -9,6 +9,7 @@ from app.api.deps import get_current_user
 from app.database import db_session
 from app.models.user import User
 from app.repositories.document_repo import create as create_document, get_by_id, get_by_user_id
+from app.repositories.topic_repo import get_by_id as get_topic_by_id
 from app.schemas.document import DocumentCreate, DocumentRead
 from app.workers.tasks import process_document
 
@@ -24,6 +25,7 @@ def create_document_endpoint(
     current_user: User = Depends(get_current_user),
     title: str = Form(...), # Form(...) indicates that the title is expected as form data in the request
     source_type: str = Form(...), # ... indicates that the source_type is also expected as form data in the request
+    topic_id: int | None = Form(default=None),
     file: UploadFile = File(...),
 ) -> DocumentRead:
     original_name = Path(file.filename or "upload.txt").name
@@ -31,6 +33,12 @@ def create_document_endpoint(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only .txt uploads are supported for now",
+        )
+
+    if topic_id is not None and get_topic_by_id(db, topic_id, user_id=current_user.id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Topic not found",
         )
 
     # save the uploaded file to the server
@@ -43,6 +51,7 @@ def create_document_endpoint(
         title=title,
         source_type=source_type,
         file_path=str(file_path),
+        topic_id=topic_id,
     )
     document = create_document(db, document_data, user_id=current_user.id)
     process_document.delay(document.id)  # enqueue the document processing task
