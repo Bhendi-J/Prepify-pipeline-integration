@@ -37,6 +37,7 @@ def similarity_search(
             Topic.id == topic_id,
             Topic.user_id == user_id,
             Document.user_id == user_id,
+            Document.status == "ready",
             func.vector_dims(Chunk.embedding) == len(query_embedding),
         )
         .order_by(distance)
