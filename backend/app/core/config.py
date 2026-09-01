@@ -18,6 +18,7 @@ class Settings(BaseSettings): #centralized application settings loaded from envi
     HF_TOKEN: str | None = None
     HUGGINGFACE_PROVIDER: str = "hf-inference"
     HUGGINGFACE_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    MAX_UPLOAD_BYTES: int = 1_000_000
 
 
 settings = Settings() #single shared settings instance used across the backend

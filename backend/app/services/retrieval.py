@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.chunk import Chunk
+from app.models.document import Document
 from app.models.topic import Topic
 from app.services.llm_client import get_embeddings
 
@@ -31,9 +32,11 @@ def similarity_search(
     statement = (
         select(Chunk, distance)
         .join(Topic, Chunk.topic_id == Topic.id)
+        .join(Document, Chunk.document_id == Document.id)
         .where(
             Topic.id == topic_id,
             Topic.user_id == user_id,
+            Document.user_id == user_id,
             func.vector_dims(Chunk.embedding) == len(query_embedding),
         )
         .order_by(distance)

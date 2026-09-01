@@ -22,6 +22,7 @@ def process_document(document_id: int) -> None:
         text = extract_text(document.file_path)
         text_chunks = chunk_text(text)
         embeddings = get_embeddings([chunk.content for chunk in text_chunks])
+        db.refresh(document)
         replace_for_document(
             db,
             document_id=document.id,

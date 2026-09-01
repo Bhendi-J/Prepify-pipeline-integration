@@ -18,3 +18,14 @@ def replace_for_document(
     db.add_all(chunks)
     db.commit()
     return chunks
+
+
+def set_topic_for_document(
+    db: Session,
+    document_id: int,
+    topic_id: int | None,
+) -> None:
+    db.query(Chunk).filter(Chunk.document_id == document_id).update(
+        {"topic_id": topic_id},
+        synchronize_session=False,
+    )

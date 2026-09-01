@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
-from app.schemas.document import DocumentCreate
+from app.repositories.chunk_repo import set_topic_for_document
+from app.schemas.document import DocumentCreate, DocumentUpdate
 
 
 def get_by_user_id(db: Session, user_id: int) -> list[Document]:
@@ -25,6 +26,21 @@ def create(db: Session, document_data: DocumentCreate, user_id: int, status: str
 
     document = Document(**payload)
     db.add(document)
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+def update(db: Session, document: Document, document_data: DocumentUpdate) -> Document:
+    payload = document_data.model_dump(exclude_unset=True)
+    topic_changed = "topic_id" in payload and payload["topic_id"] != document.topic_id
+
+    for field, value in payload.items():
+        setattr(document, field, value)
+
+    if topic_changed:
+        set_topic_for_document(db, document.id, payload["topic_id"])
+
     db.commit()
     db.refresh(document)
     return document

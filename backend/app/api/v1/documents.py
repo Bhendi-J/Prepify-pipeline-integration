@@ -1,16 +1,20 @@
-from uuid import uuid4
-
-import shutil
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.database import db_session
 from app.models.user import User
-from app.repositories.document_repo import create as create_document, get_by_id, get_by_user_id
+from app.repositories.document_repo import (
+    create as create_document,
+    get_by_id,
+    get_by_user_id,
+    update as update_document,
+)
 from app.repositories.topic_repo import get_by_id as get_topic_by_id
-from app.schemas.document import DocumentCreate, DocumentRead
+from app.schemas.document import DocumentCreate, DocumentRead, DocumentUpdate
 from app.workers.tasks import process_document
 
 
@@ -35,16 +39,11 @@ def create_document_endpoint(
             detail="Only .txt uploads are supported for now",
         )
 
-    if topic_id is not None and get_topic_by_id(db, topic_id, user_id=current_user.id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Topic not found",
-        )
+    _validate_topic_owner(db, topic_id, current_user.id)
 
     # save the uploaded file to the server
     file_path = UPLOAD_DIR / f"{uuid4().hex}_{original_name}"
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    _save_upload(file, file_path)
 
     # create a new document record in the database
     document_data = DocumentCreate(
@@ -74,6 +73,27 @@ def get_document(
     return document
 
 
+@router.patch("/{document_id}", response_model=DocumentRead)
+def update_document_endpoint(
+    document_id: int,
+    document_in: DocumentUpdate,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> DocumentRead:
+    document = get_by_id(db, document_id, user_id=current_user.id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    payload = document_in.model_dump(exclude_unset=True)
+    if "topic_id" in payload:
+        _validate_topic_owner(db, payload["topic_id"], current_user.id)
+
+    return update_document(db, document, document_in)
+
+
 @router.get("/", response_model=list[DocumentRead])
 def list_documents(
     db: db_session,
@@ -81,3 +101,35 @@ def list_documents(
 ) -> list[DocumentRead]:
     # retrieve all document records for the authenticated user
     return get_by_user_id(db, user_id=current_user.id)
+
+
+def _validate_topic_owner(
+    db: db_session,
+    topic_id: int | None,
+    user_id: int,
+) -> None:
+    if topic_id is None:
+        return
+
+    if get_topic_by_id(db, topic_id, user_id=user_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Topic not found",
+        )
+
+
+def _save_upload(file: UploadFile, file_path: Path) -> None:
+    bytes_written = 0
+    try:
+        with file_path.open("wb") as buffer:
+            while chunk := file.file.read(1024 * 1024):
+                bytes_written += len(chunk)
+                if bytes_written > settings.MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="Uploaded file is too large",
+                    )
+                buffer.write(chunk)
+    except Exception:
+        file_path.unlink(missing_ok=True)
+        raise
