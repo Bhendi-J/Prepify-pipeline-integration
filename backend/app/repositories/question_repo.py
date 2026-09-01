@@ -1,7 +1,20 @@
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session, selectinload
 
-from app.models.question import Question
+from app.models.question import Question, QuestionChunk
 from app.schemas.question import QuestionCreate
+
+
+def lock_generation_slot(
+    db: Session,
+    user_id: int,
+    topic_id: int,
+    difficulty: str,
+) -> None:
+    lock_key = f"practice-question:{user_id}:{topic_id}:{difficulty}"
+    db.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(lock_key, 0)))
+    )
 
 
 def get_latest_by_topic(
@@ -11,6 +24,7 @@ def get_latest_by_topic(
 ) -> Question | None:
     return (
         db.query(Question)
+        .options(selectinload(Question.source_chunks))
         .filter(
             Question.topic_id == topic_id,
             Question.difficulty == difficulty,
@@ -21,8 +35,34 @@ def get_latest_by_topic(
 
 
 def create(db: Session, question_data: QuestionCreate) -> Question:
-    question = Question(**question_data.model_dump())
+    payload = question_data.model_dump()
+    source_chunk_ids = _dedupe_chunk_ids(payload.pop("source_chunk_ids"))
+    if not source_chunk_ids and payload["chunk_id"] is not None:
+        source_chunk_ids = [payload["chunk_id"]]
+
+    question = Question(**payload)
     db.add(question)
+    db.flush()
+
+    db.add_all(
+        QuestionChunk(
+            question_id=question.id,
+            chunk_id=chunk_id,
+            position=position,
+        )
+        for position, chunk_id in enumerate(source_chunk_ids)
+    )
     db.commit()
     db.refresh(question)
     return question
+
+
+def _dedupe_chunk_ids(chunk_ids: list[int]) -> list[int]:
+    seen: set[int] = set()
+    deduped: list[int] = []
+    for chunk_id in chunk_ids:
+        if chunk_id in seen:
+            continue
+        seen.add(chunk_id)
+        deduped.append(chunk_id)
+    return deduped

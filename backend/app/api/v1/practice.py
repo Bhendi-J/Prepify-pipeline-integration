@@ -4,7 +4,7 @@ from app.api.deps import get_current_user
 from app.database import db_session
 from app.models.user import User
 from app.repositories import question_repo, topic_repo
-from app.schemas.question import PracticeQuestionRequest, QuestionCreate, QuestionRead
+from app.schemas.question import PracticeQuestionRequest, QuestionCreate, QuestionPublic
 from app.services.question_gen import QuestionGenerationError, generate_question
 from app.services.retrieval import similarity_search
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/v1/practice", tags=["practice"])
 
 @router.post(
     "/{topic_id}/question",
-    response_model=QuestionRead,
+    response_model=QuestionPublic,
     status_code=status.HTTP_201_CREATED,
 )
 def create_practice_question(
@@ -22,7 +22,7 @@ def create_practice_question(
     db: db_session,
     question_in: PracticeQuestionRequest | None = None,
     current_user: User = Depends(get_current_user),
-) -> QuestionRead:
+) -> QuestionPublic:
     topic = topic_repo.get_by_id(db, topic_id, user_id=current_user.id)
     if topic is None:
         raise HTTPException(
@@ -31,7 +31,13 @@ def create_practice_question(
         )
 
     request = question_in or PracticeQuestionRequest()
-    if request.query is None:
+    if request.query is None and not request.force_new:
+        question_repo.lock_generation_slot(
+            db,
+            user_id=current_user.id,
+            topic_id=topic.id,
+            difficulty=request.difficulty,
+        )
         existing_question = question_repo.get_latest_by_topic(
             db,
             topic_id=topic.id,
@@ -67,6 +73,7 @@ def create_practice_question(
         QuestionCreate(
             topic_id=topic.id,
             chunk_id=chunks[0].id,
+            source_chunk_ids=[chunk.id for chunk in chunks],
             question_text=generated.question_text,
             answer_text=generated.answer_text,
             difficulty=request.difficulty,

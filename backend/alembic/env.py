@@ -15,7 +15,7 @@ from app.models.user import User
 from app.models.document import Document
 from app.models.chunk import Chunk
 from app.models.topic import Topic
-from app.models.question import Question
+from app.models.question import Question, QuestionChunk
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
