@@ -12,6 +12,13 @@ backend/.env.*
 # Uploaded/generated files from local testing
 backend/uploads/*
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
 # Logs
 backend/*.log
 *.log

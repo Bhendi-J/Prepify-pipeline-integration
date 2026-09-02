@@ -75,6 +75,16 @@ Run the worker:
 celery -A app.workers.celery_app worker --loglevel=info
 ```
 
+Run the frontend:
+
+```bash
+cd ../frontend
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. The frontend calls the API at `http://127.0.0.1:8000` unless `VITE_API_BASE_URL` is set.
+
 ## Docker Compose
 
 From the repo root:
