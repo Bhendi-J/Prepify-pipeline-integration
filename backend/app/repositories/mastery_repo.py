@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.mastery import Mastery
@@ -32,15 +33,53 @@ def get_or_create(
     return mastery
 
 
-def get_by_topic(db: Session, user_id: int, topic_id: int) -> Mastery | None:
-    return (
+def lock_mastery_slot(db: Session, user_id: int, topic_id: int) -> None:
+    lock_key = f"mastery:{user_id}:{topic_id}"
+    db.execute(
+        select(func.pg_advisory_xact_lock(func.hashtextextended(lock_key, 0)))
+    )
+
+
+def get_or_create_for_update(
+    db: Session,
+    user_id: int,
+    topic_id: int,
+    now: datetime | None = None,
+) -> Mastery:
+    mastery = get_by_topic(db, user_id=user_id, topic_id=topic_id, for_update=True)
+    if mastery is not None:
+        return mastery
+
+    current_time = now or datetime.now(UTC)
+    mastery = Mastery(
+        user_id=user_id,
+        topic_id=topic_id,
+        ease_factor=2.5,
+        interval_days=0,
+        next_review_at=current_time,
+        streak=0,
+    )
+    db.add(mastery)
+    db.flush()
+    return mastery
+
+
+def get_by_topic(
+    db: Session,
+    user_id: int,
+    topic_id: int,
+    for_update: bool = False,
+) -> Mastery | None:
+    query = (
         db.query(Mastery)
         .filter(
             Mastery.user_id == user_id,
             Mastery.topic_id == topic_id,
         )
-        .first()
     )
+    if for_update:
+        query = query.with_for_update()
+    return query.first()
 
 
 def list_due(

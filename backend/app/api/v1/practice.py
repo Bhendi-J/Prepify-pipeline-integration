@@ -114,7 +114,12 @@ def submit_attempt(
         user_id=current_user.id,
         question_id=question.id,
     )
-    mastery = mastery_repo.get_or_create(
+    mastery_repo.lock_mastery_slot(
+        db,
+        user_id=current_user.id,
+        topic_id=question.topic_id,
+    )
+    mastery = mastery_repo.get_or_create_for_update(
         db,
         user_id=current_user.id,
         topic_id=question.topic_id,
