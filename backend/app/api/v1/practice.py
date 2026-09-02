@@ -1,6 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.database import db_session
 from app.models.user import User
 from app.repositories import attempt_repo, mastery_repo, question_repo, topic_repo
@@ -53,6 +56,8 @@ def create_practice_question(
             )
             if not was_attempted:
                 return existing_question
+
+    _enforce_question_generation_limit(db, current_user.id)
 
     results = similarity_search(
         db,
@@ -140,3 +145,13 @@ def submit_attempt(
         answer_text=question.answer_text,
         next_review_at=mastery.next_review_at,
     )
+
+
+def _enforce_question_generation_limit(db: db_session, user_id: int) -> None:
+    since = datetime.now(UTC) - timedelta(days=1)
+    generated_count = question_repo.count_generated_since(db, user_id=user_id, since=since)
+    if generated_count >= settings.MAX_QUESTION_GENERATIONS_PER_DAY:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Daily question generation limit reached",
+        )

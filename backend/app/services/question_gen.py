@@ -58,13 +58,17 @@ def generate_question(
         provider=settings.HUGGINGFACE_CHAT_PROVIDER,
         api_key=settings.HF_TOKEN,
     )
-    response = client.chat_completion(
-        model=settings.HUGGINGFACE_QUESTION_MODEL,
-        messages=[{"role": "user", "content": build_prompt(chunks, difficulty)}],
-        max_tokens=settings.QUESTION_MAX_TOKENS,
-        temperature=settings.QUESTION_TEMPERATURE,
-    )
-    content = response.choices[0].message.content
+    try:
+        response = client.chat_completion(
+            model=settings.HUGGINGFACE_QUESTION_MODEL,
+            messages=[{"role": "user", "content": build_prompt(chunks, difficulty)}],
+            max_tokens=settings.QUESTION_MAX_TOKENS,
+            temperature=settings.QUESTION_TEMPERATURE,
+        )
+        content = response.choices[0].message.content
+    except Exception as exc:
+        raise QuestionGenerationError("Question generation provider failed") from exc
+
     if not content:
         raise QuestionGenerationError("Question generation returned empty content")
 

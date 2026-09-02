@@ -53,7 +53,15 @@ def create_document_endpoint(
         topic_id=topic_id,
     )
     document = create_document(db, document_data, user_id=current_user.id)
-    process_document.delay(document.id)  # enqueue the document processing task
+    try:
+        process_document.delay(document.id)  # enqueue the document processing task
+    except Exception as exc:
+        document.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document processing queue is unavailable",
+        ) from exc
     return document
 
 

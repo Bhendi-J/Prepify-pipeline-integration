@@ -22,6 +22,7 @@ class Settings(BaseSettings): #centralized application settings loaded from envi
     HUGGINGFACE_QUESTION_MODEL: str = "meta-llama/Llama-3.1-8B-Instruct"
     QUESTION_MAX_TOKENS: int = 180
     QUESTION_TEMPERATURE: float = 0.2
+    MAX_QUESTION_GENERATIONS_PER_DAY: int = 20
     MAX_UPLOAD_BYTES: int = 1_000_000
 
 

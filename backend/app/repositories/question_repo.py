@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -46,6 +48,19 @@ def get_by_id(db: Session, question_id: int, user_id: int | None = None) -> Ques
             Topic.user_id == user_id
         )
     return query.first()
+
+
+def count_generated_since(db: Session, user_id: int, since: datetime) -> int:
+    return (
+        db.query(func.count(Question.id))
+        .join(Topic, Question.topic_id == Topic.id)
+        .filter(
+            Topic.user_id == user_id,
+            Question.created_at >= since,
+        )
+        .scalar()
+        or 0
+    )
 
 
 def create(db: Session, question_data: QuestionCreate) -> Question:

@@ -1,0 +1,82 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: prepify
+      POSTGRES_USER: prepify
+      POSTGRES_PASSWORD: prepify
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prepify -d prepify"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./backend
+    command: sh -c "alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://prepify:prepify@postgres:5432/prepify
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-huggingface}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGINGFACE_PROVIDER: ${HUGGINGFACE_PROVIDER:-hf-inference}
+      HUGGINGFACE_EMBEDDING_MODEL: ${HUGGINGFACE_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      HUGGINGFACE_CHAT_PROVIDER: ${HUGGINGFACE_CHAT_PROVIDER:-auto}
+      HUGGINGFACE_QUESTION_MODEL: ${HUGGINGFACE_QUESTION_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      MAX_QUESTION_GENERATIONS_PER_DAY: ${MAX_QUESTION_GENERATIONS_PER_DAY:-20}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-1000000}
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+    command: celery -A app.workers.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+psycopg://prepify:prepify@postgres:5432/prepify
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-huggingface}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HUGGINGFACE_PROVIDER: ${HUGGINGFACE_PROVIDER:-hf-inference}
+      HUGGINGFACE_EMBEDDING_MODEL: ${HUGGINGFACE_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      HUGGINGFACE_CHAT_PROVIDER: ${HUGGINGFACE_CHAT_PROVIDER:-auto}
+      HUGGINGFACE_QUESTION_MODEL: ${HUGGINGFACE_QUESTION_MODEL:-meta-llama/Llama-3.1-8B-Instruct}
+      MAX_QUESTION_GENERATIONS_PER_DAY: ${MAX_QUESTION_GENERATIONS_PER_DAY:-20}
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-1000000}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  uploads_data:

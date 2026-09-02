@@ -26,6 +26,9 @@ def similarity_search(
     query: str,
     k: int = 5,
 ) -> list[SearchResult]:
+    if not _has_ready_chunks(db, user_id=user_id, topic_id=topic_id):
+        return []
+
     query_embedding = embed_query(query)
     distance = Chunk.embedding.l2_distance(query_embedding).label("distance")
 
@@ -48,3 +51,19 @@ def similarity_search(
         SearchResult(chunk=chunk, distance=float(score))
         for chunk, score in db.execute(statement).all()
     ]
+
+
+def _has_ready_chunks(db: Session, user_id: int, topic_id: int) -> bool:
+    return (
+        db.query(Chunk.id)
+        .join(Topic, Chunk.topic_id == Topic.id)
+        .join(Document, Chunk.document_id == Document.id)
+        .filter(
+            Topic.id == topic_id,
+            Topic.user_id == user_id,
+            Document.user_id == user_id,
+            Document.status == "ready",
+        )
+        .first()
+        is not None
+    )
