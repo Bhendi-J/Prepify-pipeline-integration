@@ -7,6 +7,7 @@ class QuestionCreate(BaseModel):
     question_text: str
     answer_text: str
     difficulty: str = Field(max_length=50)
+    question_type: str = Field(default="short_answer", max_length=50)
     source_chunk_ids: list[int] = Field(default_factory=list)
 
 
@@ -17,6 +18,7 @@ class QuestionPublic(BaseModel):
     source_chunk_ids: list[int]
     question_text: str
     difficulty: str
+    question_type: str
 
     model_config = {"from_attributes": True}
 

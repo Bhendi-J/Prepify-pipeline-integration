@@ -47,6 +47,7 @@ def create_practice_question(
             db,
             topic_id=topic.id,
             difficulty=request.difficulty,
+            question_type=request.question_type,
         )
         if existing_question is not None:
             was_attempted = attempt_repo.exists_for_question(
@@ -101,9 +102,29 @@ def create_practice_question(
             question_text=generated.question_text,
             answer_text=generated.answer_text,
             difficulty=request.difficulty,
+            question_type=request.question_type,
         ),
     )
     return question
+
+
+@router.get("/{topic_id}/questions", response_model=list[QuestionPublic])
+def list_practice_questions(
+    topic_id: int,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> list[QuestionPublic]:
+    topic = topic_repo.get_by_id(db, topic_id, user_id=current_user.id)
+    if topic is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Topic not found",
+        )
+    return question_repo.list_by_topic(
+        db,
+        topic_id=topic.id,
+        user_id=current_user.id,
+    )
 
 
 @router.post(

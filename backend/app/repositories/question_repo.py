@@ -24,6 +24,7 @@ def get_latest_by_topic(
     db: Session,
     topic_id: int,
     difficulty: str,
+    question_type: str = "short_answer",
 ) -> Question | None:
     return (
         db.query(Question)
@@ -31,9 +32,30 @@ def get_latest_by_topic(
         .filter(
             Question.topic_id == topic_id,
             Question.difficulty == difficulty,
+            Question.question_type == question_type,
         )
         .order_by(Question.id.desc())
         .first()
+    )
+
+
+def list_by_topic(
+    db: Session,
+    topic_id: int,
+    user_id: int,
+    limit: int = 50,
+) -> list[Question]:
+    return (
+        db.query(Question)
+        .options(selectinload(Question.source_chunks))
+        .join(Topic, Question.topic_id == Topic.id)
+        .filter(
+            Question.topic_id == topic_id,
+            Topic.user_id == user_id,
+        )
+        .order_by(Question.id.desc())
+        .limit(limit)
+        .all()
     )
 
 

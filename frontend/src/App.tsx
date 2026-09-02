@@ -105,10 +105,15 @@ export default function App() {
       setTopics(topicRows);
       setDocuments(documentRows);
       setDueTopics(dueRows);
-      const nextSelectedTopicId = selectedTopicId ?? topicRows[0]?.id ?? null;
+      const currentTopicStillExists = topicRows.some((topic) => topic.id === selectedTopicId);
+      const nextSelectedTopicId = currentTopicStillExists
+        ? selectedTopicId
+        : topicRows[0]?.id ?? null;
       if (nextSelectedTopicId) {
         setSelectedTopicId(nextSelectedTopicId);
-        setProgress(await api.getProgress(authToken, nextSelectedTopicId));
+        await loadTopicState(authToken, nextSelectedTopicId);
+      } else {
+        clearTopicState();
       }
     } catch (error) {
       showError(error);
@@ -126,6 +131,11 @@ export default function App() {
       }
       const result = await api.login(email, password);
       localStorage.setItem("prepify_token", result.access_token);
+      clearTopicState();
+      setSelectedTopicId(null);
+      setTopics([]);
+      setDocuments([]);
+      setDueTopics([]);
       setToken(result.access_token);
       setNotice({ type: "ok", message: "Signed in" });
     } catch (error) {
@@ -206,7 +216,7 @@ export default function App() {
           }),
         );
       }
-      setQuestions(generated);
+      setQuestions((current) => mergeQuestions(generated, current));
       setActiveQuestionIndex(0);
       setQuestionStartedAt(Date.now());
       setAnswerDraft("");
@@ -258,6 +268,24 @@ export default function App() {
 
   function selectTopic(topicId: number) {
     setSelectedTopicId(topicId);
+    clearTopicState();
+    if (token) {
+      void loadTopicState(token, topicId);
+    }
+  }
+
+  async function loadTopicState(authToken: string, topicId: number) {
+    const [topicProgress, savedQuestions] = await Promise.all([
+      api.getProgress(authToken, topicId),
+      api.listQuestions(authToken, topicId),
+    ]);
+    setProgress(topicProgress);
+    setQuestions(savedQuestions);
+    setActiveQuestionIndex(0);
+    setQuestionStartedAt(savedQuestions.length > 0 ? Date.now() : null);
+  }
+
+  function clearTopicState() {
     setSearchResults([]);
     setSearchQuery("");
     setQuestions([]);
@@ -265,9 +293,7 @@ export default function App() {
     setAnswerDraft("");
     setAttempt(null);
     setProgress(null);
-    if (token) {
-      void api.getProgress(token, topicId).then(setProgress).catch(showError);
-    }
+    setQuestionStartedAt(null);
   }
 
   function moveQuestion(direction: -1 | 1) {
@@ -276,6 +302,13 @@ export default function App() {
       return;
     }
     setActiveQuestionIndex(nextIndex);
+    setAnswerDraft("");
+    setAttempt(null);
+    setQuestionStartedAt(Date.now());
+  }
+
+  function selectQuestion(index: number) {
+    setActiveQuestionIndex(index);
     setAnswerDraft("");
     setAttempt(null);
     setQuestionStartedAt(Date.now());
@@ -470,7 +503,7 @@ export default function App() {
             {activeQuestion && (
               <article className="question-box">
                 <span>
-                  {activeQuestion.difficulty} - {activeQuestionIndex + 1} of {questions.length}
+                  {activeQuestion.difficulty} - {activeQuestion.question_type.replace("_", " ")} - {activeQuestionIndex + 1} of {questions.length}
                 </span>
                 <h3>{activeQuestion.question_text}</h3>
                 <textarea
@@ -511,6 +544,21 @@ export default function App() {
                 <span>Next review {formatDate(attempt.next_review_at)}</span>
               </article>
             )}
+
+            {questions.length > 0 && (
+              <div className="question-list">
+                {questions.map((savedQuestion, index) => (
+                  <button
+                    key={savedQuestion.id}
+                    className={index === activeQuestionIndex ? "selected" : ""}
+                    onClick={() => selectQuestion(index)}
+                  >
+                    <span>{index + 1}</span>
+                    <strong>{savedQuestion.question_text}</strong>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="panel due-panel">
@@ -544,4 +592,12 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function mergeQuestions(newQuestions: Question[], savedQuestions: Question[]) {
+  const byId = new Map<number, Question>();
+  for (const question of [...newQuestions, ...savedQuestions]) {
+    byId.set(question.id, question);
+  }
+  return [...byId.values()];
 }

@@ -117,6 +117,14 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(progress.status_code, 200)
         self.assertEqual(progress.json()["streak"], 1)
 
+        questions = self.client.get(
+            f"/api/v1/practice/{topic.id}/questions",
+            headers=self._auth_headers(owner.id),
+        )
+        self.assertEqual(questions.status_code, 200)
+        self.assertEqual(questions.json()[0]["id"], question.id)
+        self.assertNotIn("answer_text", questions.json()[0])
+
         due = self.client.get("/api/v1/progress/due", headers=self._auth_headers(owner.id))
         self.assertEqual(due.status_code, 200)
         self.assertEqual(due.json(), [])

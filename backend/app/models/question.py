@@ -23,6 +23,11 @@ class Question(Base):
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
     difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
+    question_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="short_answer",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

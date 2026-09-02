@@ -40,6 +40,7 @@ export type Question = {
   source_chunk_ids: number[];
   question_text: string;
   difficulty: string;
+  question_type: string;
 };
 
 export type AttemptResult = {
@@ -170,6 +171,9 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
     });
+  },
+  listQuestions(token: string, topicId: number) {
+    return request<Question[]>(`/api/v1/practice/${topicId}/questions`, { token });
   },
   submitAttempt(token: string, questionId: number, input: { is_correct: boolean; response_time_ms?: number }) {
     return request<AttemptResult>(`/api/v1/practice/${questionId}/attempt`, {
