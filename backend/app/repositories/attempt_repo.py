@@ -9,6 +9,7 @@ def create(
     attempt_data: AttemptCreate,
     user_id: int,
     question_id: int,
+    commit: bool = True,
 ) -> Attempt:
     attempt = Attempt(
         **attempt_data.model_dump(),
@@ -16,7 +17,10 @@ def create(
         question_id=question_id,
     )
     db.add(attempt)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     db.refresh(attempt)
     return attempt
 

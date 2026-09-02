@@ -56,6 +56,13 @@ def create_practice_question(
             )
             if not was_attempted:
                 return existing_question
+    else:
+        question_repo.lock_generation_slot(
+            db,
+            user_id=current_user.id,
+            topic_id=topic.id,
+            difficulty=request.difficulty,
+        )
 
     _enforce_question_generation_limit(db, current_user.id)
 
@@ -113,12 +120,6 @@ def submit_attempt(
             detail="Question not found",
         )
 
-    attempt = attempt_repo.create(
-        db,
-        attempt_data=attempt_in,
-        user_id=current_user.id,
-        question_id=question.id,
-    )
     mastery_repo.lock_mastery_slot(
         db,
         user_id=current_user.id,
@@ -128,6 +129,13 @@ def submit_attempt(
         db,
         user_id=current_user.id,
         topic_id=question.topic_id,
+    )
+    attempt = attempt_repo.create(
+        db,
+        attempt_data=attempt_in,
+        user_id=current_user.id,
+        question_id=question.id,
+        commit=False,
     )
     updated_state = sm2_update(
         mastery_repo.to_state(mastery),
