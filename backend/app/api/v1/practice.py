@@ -81,7 +81,11 @@ def create_practice_question(
 
     chunks = [result.chunk for result in results]
     try:
-        generated = generate_question(chunks, difficulty=request.difficulty)
+        generated = generate_question(
+            chunks,
+            difficulty=request.difficulty,
+            question_type=request.question_type,
+        )
     except QuestionGenerationError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

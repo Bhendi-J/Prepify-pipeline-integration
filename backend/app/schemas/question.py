@@ -24,5 +24,6 @@ class QuestionPublic(BaseModel):
 class PracticeQuestionRequest(BaseModel):
     query: str | None = Field(default=None, min_length=1)
     difficulty: str = Field(default="medium", max_length=50)
+    question_type: str = Field(default="short_answer", max_length=50)
     k: int = Field(default=5, ge=1, le=10)
     force_new: bool = False

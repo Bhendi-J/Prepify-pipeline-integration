@@ -154,7 +154,16 @@ export const api = {
       body: JSON.stringify({ query, k }),
     });
   },
-  createQuestion(token: string, topicId: number, input: { query?: string; difficulty: string; force_new: boolean }) {
+  createQuestion(
+    token: string,
+    topicId: number,
+    input: {
+      query?: string;
+      difficulty: string;
+      question_type: string;
+      force_new: boolean;
+    },
+  ) {
     return request<Question>(`/api/v1/practice/${topicId}/question`, {
       token,
       method: "POST",

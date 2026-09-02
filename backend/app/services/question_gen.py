@@ -18,7 +18,11 @@ class GeneratedQuestion:
     difficulty: str
 
 
-def build_prompt(chunks: Sequence[Chunk], difficulty: str) -> str:
+def build_prompt(
+    chunks: Sequence[Chunk],
+    difficulty: str,
+    question_type: str = "short_answer",
+) -> str:
     context = "\n\n".join(
         f"Chunk {index + 1}:\n{chunk.content}"
         for index, chunk in enumerate(chunks)
@@ -31,6 +35,9 @@ Return only JSON with exactly these keys:
 question_text, answer_text, difficulty
 
 The question should be {difficulty} difficulty.
+The question type should be {question_type}.
+If the question type is multiple_choice, include 4 labeled options inside question_text.
+If the question type is true_false, make question_text answerable as true or false.
 The answer should be concise but complete.
 
 Study notes:
@@ -41,6 +48,7 @@ Study notes:
 def generate_question(
     chunks: Sequence[Chunk],
     difficulty: str = "medium",
+    question_type: str = "short_answer",
 ) -> GeneratedQuestion:
     if not chunks:
         raise QuestionGenerationError("Cannot generate a question without chunks")
@@ -61,7 +69,12 @@ def generate_question(
     try:
         response = client.chat_completion(
             model=settings.HUGGINGFACE_QUESTION_MODEL,
-            messages=[{"role": "user", "content": build_prompt(chunks, difficulty)}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": build_prompt(chunks, difficulty, question_type),
+                }
+            ],
             max_tokens=settings.QUESTION_MAX_TOKENS,
             temperature=settings.QUESTION_TEMPERATURE,
         )

@@ -44,7 +44,12 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [questionQuery, setQuestionQuery] = useState("");
   const [difficulty, setDifficulty] = useState("medium");
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [questionType, setQuestionType] = useState("short_answer");
+  const [questionCount, setQuestionCount] = useState(3);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [answerDraft, setAnswerDraft] = useState("");
+  const [questionStartedAt, setQuestionStartedAt] = useState<number | null>(null);
   const [attempt, setAttempt] = useState<AttemptResult | null>(null);
   const [progress, setProgress] = useState<Mastery | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,6 +59,15 @@ export default function App() {
     () => topics.find((topic) => topic.id === selectedTopicId) ?? null,
     [topics, selectedTopicId],
   );
+  const selectedDocuments = useMemo(
+    () => documents.filter((document) => document.topic_id === selectedTopicId),
+    [documents, selectedTopicId],
+  );
+  const selectedDueTopic = useMemo(
+    () => dueTopics.find((topic) => topic.topic_id === selectedTopicId) ?? null,
+    [dueTopics, selectedTopicId],
+  );
+  const activeQuestion = questions[activeQuestionIndex] ?? null;
 
   useEffect(() => {
     if (token) {
@@ -91,7 +105,11 @@ export default function App() {
       setTopics(topicRows);
       setDocuments(documentRows);
       setDueTopics(dueRows);
-      setSelectedTopicId((current) => current ?? topicRows[0]?.id ?? null);
+      const nextSelectedTopicId = selectedTopicId ?? topicRows[0]?.id ?? null;
+      if (nextSelectedTopicId) {
+        setSelectedTopicId(nextSelectedTopicId);
+        setProgress(await api.getProgress(authToken, nextSelectedTopicId));
+      }
     } catch (error) {
       showError(error);
     } finally {
@@ -125,7 +143,7 @@ export default function App() {
     try {
       const topic = await api.createTopic(token, newTopicName.trim());
       setTopics((current) => [...current, topic].sort((a, b) => a.name.localeCompare(b.name)));
-      setSelectedTopicId(topic.id);
+      selectTopic(topic.id);
       setNewTopicName("");
       setNotice({ type: "ok", message: "Topic created" });
     } catch (error) {
@@ -168,18 +186,30 @@ export default function App() {
     }
   }
 
-  async function handleGenerateQuestion(forceNew = false) {
+  async function handleGenerateQuestions(forceNew = false) {
     if (!token || !selectedTopicId) {
       return;
     }
     setLoading(true);
     try {
-      const nextQuestion = await api.createQuestion(token, selectedTopicId, {
-        query: questionQuery.trim() || undefined,
-        difficulty,
-        force_new: forceNew,
-      });
-      setQuestion(nextQuestion);
+      const count = Number.isFinite(questionCount)
+        ? Math.max(1, Math.min(questionCount, 5))
+        : 1;
+      const generated: Question[] = [];
+      for (let index = 0; index < count; index += 1) {
+        generated.push(
+          await api.createQuestion(token, selectedTopicId, {
+            query: questionQuery.trim() || undefined,
+            difficulty,
+            question_type: questionType,
+            force_new: forceNew || index > 0,
+          }),
+        );
+      }
+      setQuestions(generated);
+      setActiveQuestionIndex(0);
+      setQuestionStartedAt(Date.now());
+      setAnswerDraft("");
       setAttempt(null);
     } catch (error) {
       showError(error);
@@ -189,12 +219,16 @@ export default function App() {
   }
 
   async function handleAttempt(is_correct: boolean) {
-    if (!token || !question) {
+    if (!token || !activeQuestion) {
       return;
     }
     setLoading(true);
     try {
-      const result = await api.submitAttempt(token, question.id, { is_correct });
+      const response_time_ms = questionStartedAt ? Date.now() - questionStartedAt : undefined;
+      const result = await api.submitAttempt(token, activeQuestion.id, {
+        is_correct,
+        response_time_ms,
+      });
       setAttempt(result);
       if (selectedTopicId) {
         setProgress(await api.getProgress(token, selectedTopicId));
@@ -213,13 +247,38 @@ export default function App() {
     setTopics([]);
     setDocuments([]);
     setDueTopics([]);
-    setQuestion(null);
+    setQuestions([]);
     setAttempt(null);
     setProgress(null);
   }
 
   function showError(error: unknown) {
     setNotice({ type: "error", message: error instanceof Error ? error.message : "Something went wrong" });
+  }
+
+  function selectTopic(topicId: number) {
+    setSelectedTopicId(topicId);
+    setSearchResults([]);
+    setSearchQuery("");
+    setQuestions([]);
+    setActiveQuestionIndex(0);
+    setAnswerDraft("");
+    setAttempt(null);
+    setProgress(null);
+    if (token) {
+      void api.getProgress(token, topicId).then(setProgress).catch(showError);
+    }
+  }
+
+  function moveQuestion(direction: -1 | 1) {
+    const nextIndex = activeQuestionIndex + direction;
+    if (nextIndex < 0 || nextIndex >= questions.length) {
+      return;
+    }
+    setActiveQuestionIndex(nextIndex);
+    setAnswerDraft("");
+    setAttempt(null);
+    setQuestionStartedAt(Date.now());
   }
 
   if (!token) {
@@ -278,12 +337,7 @@ export default function App() {
             <button
               key={topic.id}
               className={selectedTopicId === topic.id ? "selected" : ""}
-              onClick={() => {
-                setSelectedTopicId(topic.id);
-                setQuestion(null);
-                setAttempt(null);
-                if (token) void api.getProgress(token, topic.id).then(setProgress).catch(showError);
-              }}
+              onClick={() => selectTopic(topic.id)}
             >
               {topic.name}
             </button>
@@ -318,8 +372,8 @@ export default function App() {
 
         <section className="metrics">
           <Metric label="Topics" value={topics.length} />
-          <Metric label="Documents" value={documents.length} />
-          <Metric label="Due now" value={dueTopics.length} />
+          <Metric label="Topic docs" value={selectedDocuments.length} />
+          <Metric label="Due now" value={selectedDueTopic ? 1 : 0} />
           <Metric label="Streak" value={progress?.streak ?? 0} />
         </section>
 
@@ -338,15 +392,18 @@ export default function App() {
               </button>
             </form>
             <div className="list">
-              {documents.map((doc) => (
+              {selectedDocuments.map((doc) => (
                 <article className="row" key={doc.id}>
                   <FileText size={18} />
                   <div>
                     <strong>{doc.title}</strong>
-                    <span>{doc.status} - topic {doc.topic_id ?? "none"}</span>
+                    <span>{doc.status}</span>
                   </div>
                 </article>
               ))}
+              {selectedDocuments.length === 0 && (
+                <p className="muted">No notes uploaded for this topic yet.</p>
+              )}
             </div>
           </div>
 
@@ -386,21 +443,49 @@ export default function App() {
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
               </select>
-              <button className="primary" onClick={() => void handleGenerateQuestion(false)} disabled={!selectedTopicId || loading}>
+              <select value={questionType} onChange={(event) => setQuestionType(event.target.value)}>
+                <option value="short_answer">Short answer</option>
+                <option value="multiple_choice">Multiple choice</option>
+                <option value="true_false">True/false</option>
+                <option value="conceptual">Conceptual</option>
+              </select>
+              <input
+                aria-label="Question count"
+                type="number"
+                min={1}
+                max={5}
+                value={questionCount}
+                onChange={(event) => setQuestionCount(Number(event.target.value) || 1)}
+              />
+              <button className="primary" onClick={() => void handleGenerateQuestions(false)} disabled={!selectedTopicId || loading}>
                 {loading ? <Loader2 className="spin" size={18} /> : <BookOpen size={18} />}
-                Question
+                Generate
               </button>
-              <button className="ghost" onClick={() => void handleGenerateQuestion(true)} disabled={!selectedTopicId || loading}>
+              <button className="ghost" onClick={() => void handleGenerateQuestions(true)} disabled={!selectedTopicId || loading}>
                 <RefreshCw size={18} />
                 Fresh
               </button>
             </div>
 
-            {question && (
+            {activeQuestion && (
               <article className="question-box">
-                <span>{question.difficulty}</span>
-                <h3>{question.question_text}</h3>
+                <span>
+                  {activeQuestion.difficulty} - {activeQuestionIndex + 1} of {questions.length}
+                </span>
+                <h3>{activeQuestion.question_text}</h3>
+                <textarea
+                  value={answerDraft}
+                  onChange={(event) => setAnswerDraft(event.target.value)}
+                  placeholder="Type your answer before revealing the stored answer"
+                  rows={4}
+                />
                 <div className="actions">
+                  <button onClick={() => moveQuestion(-1)} disabled={activeQuestionIndex === 0}>
+                    Previous
+                  </button>
+                  <button onClick={() => moveQuestion(1)} disabled={activeQuestionIndex >= questions.length - 1}>
+                    Next
+                  </button>
                   <button onClick={() => void handleAttempt(true)} disabled={loading}>
                     <CheckCircle2 size={18} />
                     Correct
@@ -417,6 +502,12 @@ export default function App() {
               <article className="answer-box">
                 <strong>Answer</strong>
                 <p>{attempt.answer_text}</p>
+                {answerDraft && (
+                  <>
+                    <strong>Your answer</strong>
+                    <p>{answerDraft}</p>
+                  </>
+                )}
                 <span>Next review {formatDate(attempt.next_review_at)}</span>
               </article>
             )}
@@ -424,15 +515,13 @@ export default function App() {
 
           <div className="panel due-panel">
             <h2>Due Reviews</h2>
-            {dueTopics.length === 0 ? (
-              <p className="muted">Nothing due right now.</p>
+            {!selectedDueTopic ? (
+              <p className="muted">This topic is not due right now.</p>
             ) : (
-              dueTopics.map((topic) => (
-                <button className="due-item" key={topic.topic_id} onClick={() => setSelectedTopicId(topic.topic_id)}>
-                  <strong>{topic.name}</strong>
-                  <span>{formatDate(topic.next_review_at)}</span>
-                </button>
-              ))
+              <article className="due-item">
+                <strong>{selectedDueTopic.name}</strong>
+                <span>{formatDate(selectedDueTopic.next_review_at)}</span>
+              </article>
             )}
           </div>
         </section>
