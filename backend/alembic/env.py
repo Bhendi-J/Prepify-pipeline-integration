@@ -16,6 +16,8 @@ from app.models.document import Document
 from app.models.chunk import Chunk
 from app.models.topic import Topic
 from app.models.question import Question, QuestionChunk
+from app.models.attempt import Attempt
+from app.models.mastery import Mastery
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

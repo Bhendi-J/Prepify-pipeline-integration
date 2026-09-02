@@ -2,6 +2,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.question import Question, QuestionChunk
+from app.models.topic import Topic
 from app.schemas.question import QuestionCreate
 
 
@@ -32,6 +33,19 @@ def get_latest_by_topic(
         .order_by(Question.id.desc())
         .first()
     )
+
+
+def get_by_id(db: Session, question_id: int, user_id: int | None = None) -> Question | None:
+    query = (
+        db.query(Question)
+        .options(selectinload(Question.source_chunks))
+        .filter(Question.id == question_id)
+    )
+    if user_id is not None:
+        query = query.join(Topic, Question.topic_id == Topic.id).filter(
+            Topic.user_id == user_id
+        )
+    return query.first()
 
 
 def create(db: Session, question_data: QuestionCreate) -> Question:

@@ -3,8 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.api.deps import get_current_user
 from app.database import db_session
 from app.models.user import User
-from app.repositories import question_repo, topic_repo
+from app.repositories import attempt_repo, mastery_repo, question_repo, topic_repo
+from app.schemas.attempt import AttemptCreate, AttemptRead
 from app.schemas.question import PracticeQuestionRequest, QuestionCreate, QuestionPublic
+from app.services.adaptive_engine import sm2_update
 from app.services.question_gen import QuestionGenerationError, generate_question
 from app.services.retrieval import similarity_search
 
@@ -44,7 +46,13 @@ def create_practice_question(
             difficulty=request.difficulty,
         )
         if existing_question is not None:
-            return existing_question
+            was_attempted = attempt_repo.exists_for_question(
+                db,
+                user_id=current_user.id,
+                question_id=existing_question.id,
+            )
+            if not was_attempted:
+                return existing_question
 
     results = similarity_search(
         db,
@@ -80,3 +88,50 @@ def create_practice_question(
         ),
     )
     return question
+
+
+@router.post(
+    "/{question_id}/attempt",
+    response_model=AttemptRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_attempt(
+    question_id: int,
+    attempt_in: AttemptCreate,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> AttemptRead:
+    question = question_repo.get_by_id(db, question_id, user_id=current_user.id)
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question not found",
+        )
+
+    attempt = attempt_repo.create(
+        db,
+        attempt_data=attempt_in,
+        user_id=current_user.id,
+        question_id=question.id,
+    )
+    mastery = mastery_repo.get_or_create(
+        db,
+        user_id=current_user.id,
+        topic_id=question.topic_id,
+    )
+    updated_state = sm2_update(
+        mastery_repo.to_state(mastery),
+        was_correct=attempt.is_correct,
+    )
+    mastery = mastery_repo.apply_state(db, mastery, updated_state)
+
+    return AttemptRead(
+        id=attempt.id,
+        user_id=attempt.user_id,
+        question_id=attempt.question_id,
+        is_correct=attempt.is_correct,
+        response_time_ms=attempt.response_time_ms,
+        created_at=attempt.created_at,
+        answer_text=question.answer_text,
+        next_review_at=mastery.next_review_at,
+    )
