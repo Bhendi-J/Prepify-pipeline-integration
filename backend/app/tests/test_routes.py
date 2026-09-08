@@ -187,6 +187,48 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(body["activity_streak"], 1)
         self.assertEqual(body["days"][-1]["attempted"], 1)
 
+    def test_unresolved_missed_question_keeps_topic_due_after_later_correct_answer(self) -> None:
+        owner = self._create_user()
+        topic, question = self._create_topic_question(owner.id)
+        headers = self._auth_headers(owner.id)
+        with SessionLocal() as db:
+            second = Question(
+                topic_id=topic.id,
+                chunk_id=None,
+                question_text="What falls from clouds?",
+                answer_text="Rain.",
+                difficulty="easy",
+            )
+            db.add(second)
+            db.commit()
+            db.refresh(second)
+            second_id = second.id
+
+        missed = self.client.post(
+            f"/api/v1/practice/{question.id}/attempt",
+            headers=headers,
+            json={"is_correct": False},
+        )
+        self.assertEqual(missed.status_code, 201)
+        correct = self.client.post(
+            f"/api/v1/practice/{second_id}/attempt",
+            headers=headers,
+            json={"is_correct": True},
+        )
+        self.assertEqual(correct.status_code, 201)
+
+        due = self.client.get("/api/v1/progress/due", headers=headers)
+        self.assertEqual(due.status_code, 200)
+        self.assertEqual([row["topic_id"] for row in due.json()], [topic.id])
+
+        resolved = self.client.post(
+            f"/api/v1/practice/{question.id}/attempt",
+            headers=headers,
+            json={"is_correct": True},
+        )
+        self.assertEqual(resolved.status_code, 201)
+        self.assertEqual(self.client.get("/api/v1/progress/due", headers=headers).json(), [])
+
     def test_upload_to_practice_flow(self) -> None:
         owner = self._create_user()
         headers = self._auth_headers(owner.id)

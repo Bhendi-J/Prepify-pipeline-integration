@@ -3,7 +3,9 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.models.attempt import Attempt
 from app.models.mastery import Mastery
+from app.models.question import Question
 from app.models.topic import Topic
 from app.services.adaptive_engine import MasteryState
 
@@ -88,7 +90,7 @@ def list_due(
     now: datetime | None = None,
 ) -> list[tuple[Mastery, Topic]]:
     current_time = now or datetime.now(UTC)
-    return (
+    due_rows = (
         db.query(Mastery, Topic)
         .join(Topic, Topic.id == Mastery.topic_id)
         .filter(
@@ -99,6 +101,35 @@ def list_due(
         .order_by(Mastery.next_review_at.asc(), Topic.name.asc())
         .all()
     )
+    seen_topic_ids = {topic.id for _, topic in due_rows}
+
+    latest_attempt_ids = (
+        db.query(func.max(Attempt.id).label("attempt_id"))
+        .join(Question, Question.id == Attempt.question_id)
+        .join(Topic, Topic.id == Question.topic_id)
+        .filter(Attempt.user_id == user_id, Topic.user_id == user_id)
+        .group_by(Attempt.question_id)
+        .subquery()
+    )
+    missed_rows = (
+        db.query(Mastery, Topic)
+        .join(Topic, Topic.id == Mastery.topic_id)
+        .join(Question, Question.topic_id == Topic.id)
+        .join(Attempt, Attempt.question_id == Question.id)
+        .filter(
+            Mastery.user_id == user_id,
+            Topic.user_id == user_id,
+            Attempt.id.in_(select(latest_attempt_ids.c.attempt_id)),
+            Attempt.is_correct.is_(False),
+        )
+        .order_by(Topic.name.asc())
+        .all()
+    )
+    for mastery, topic in missed_rows:
+        if topic.id not in seen_topic_ids:
+            due_rows.append((mastery, topic))
+            seen_topic_ids.add(topic.id)
+    return due_rows
 
 
 def apply_state(db: Session, mastery: Mastery, state: MasteryState) -> Mastery:
