@@ -132,9 +132,8 @@ def generate_questions(
     previous_questions: Sequence[str] = (), focus: str | None = None,
 ) -> list[GeneratedQuestion]:
     """Generate the entire session with one provider call, then validate atomically."""
-    if not chunks or not settings.HF_TOKEN:
-        raise QuestionGenerationError("Ready notes and a configured HF_TOKEN are required")
-    from huggingface_hub import InferenceClient
+    if not chunks:
+        raise QuestionGenerationError("Ready notes are required")
     context = "\n\n".join(chunk.content for chunk in chunks)
     previous = "\n".join(previous_questions[-50:])
     if question_type == "multiple_choice":
@@ -163,20 +162,15 @@ Previous questions to avoid:
 {context}
 </notes>"""
     try:
-        client = InferenceClient(provider=settings.HUGGINGFACE_CHAT_PROVIDER, api_key=settings.HF_TOKEN, timeout=120)
-        response = client.chat_completion(
-            model=settings.HUGGINGFACE_QUESTION_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max(700, count * 600), temperature=settings.QUESTION_TEMPERATURE,
-        )
-        content = response.choices[0].message.content or ""
-        payload = json.loads(_extract_json(content))
+        payload = _generate_question_payload(prompt, count)
     except QuestionGenerationError:
+        if question_type == "multiple_choice":
+            return _fallback_multiple_choice_questions(chunks, count, difficulty, previous_questions)
         raise
-    except Exception as exc:
-        raise QuestionGenerationError("Question generation failed. Please try again.") from exc
     entries = payload.get("questions") if isinstance(payload, dict) else None
     if not isinstance(entries, list) or not entries:
+        if question_type == "multiple_choice":
+            return _fallback_multiple_choice_questions(chunks, count, difficulty, previous_questions)
         raise QuestionGenerationError("The notes did not produce a usable question set. Try a smaller focus or re-upload clearer notes.")
     if len(entries) > count:
         entries = entries[:count]
@@ -188,12 +182,65 @@ Previous questions to avoid:
         text = entry["question_text"].strip()
         answer = entry["answer_text"].strip()
         if question_type == "multiple_choice":
-            answer = _normalize_multiple_choice_answer(text, answer)
+            try:
+                answer = _normalize_multiple_choice_answer(text, answer)
+            except QuestionGenerationError:
+                return _fallback_multiple_choice_questions(chunks, count, difficulty, previous_questions)
         if any(questions_are_duplicates(text, old) for old in seen):
             raise QuestionGenerationError("The model repeated an existing question. Try a different focus or fewer questions.")
         seen.append(text)
         questions.append(GeneratedQuestion(text, answer, difficulty))
     return questions
+
+
+def _generate_question_payload(prompt: str, count: int) -> dict:
+    if not settings.HF_TOKEN:
+        raise QuestionGenerationError("HF_TOKEN is required for model question generation")
+    from huggingface_hub import InferenceClient
+
+    schema = {
+        "name": "practice_questions",
+        "schema": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question_text": {"type": "string"},
+                            "answer_text": {"type": "string"},
+                        },
+                        "required": ["question_text", "answer_text"],
+                    },
+                }
+            },
+            "required": ["questions"],
+        },
+        "strict": True,
+    }
+    client = InferenceClient(provider=settings.HUGGINGFACE_CHAT_PROVIDER, api_key=settings.HF_TOKEN, timeout=120)
+    kwargs = {
+        "model": settings.HUGGINGFACE_QUESTION_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max(900, count * 700),
+        "temperature": settings.QUESTION_TEMPERATURE,
+    }
+    try:
+        response = client.chat_completion(
+            **kwargs,
+            response_format={"type": "json_schema", "json_schema": schema},
+        )
+    except Exception:
+        try:
+            response = client.chat_completion(**kwargs)
+        except Exception as exc:
+            raise QuestionGenerationError("Question generation failed. Please try again.") from exc
+    content = response.choices[0].message.content or ""
+    try:
+        return json.loads(_extract_json(content))
+    except (json.JSONDecodeError, QuestionGenerationError) as exc:
+        raise QuestionGenerationError("Question generation returned invalid JSON") from exc
 
 
 def _normalize_multiple_choice_answer(question_text: str, answer_text: str) -> str:
@@ -211,6 +258,47 @@ def _normalize_multiple_choice_answer(question_text: str, answer_text: str) -> s
     if set(options) != {"A", "B", "C", "D"}:
         raise QuestionGenerationError("The model did not return a valid multiple-choice set. Please try again.")
     raise QuestionGenerationError("The model did not identify the correct multiple-choice option. Please try again.")
+
+
+def _fallback_multiple_choice_questions(
+    chunks: Sequence[Chunk],
+    count: int,
+    difficulty: str,
+    previous_questions: Sequence[str],
+) -> list[GeneratedQuestion]:
+    sentences = _extract_note_sentences("\n".join(chunk.content for chunk in chunks))
+    questions: list[GeneratedQuestion] = []
+    seen = list(previous_questions)
+    for sentence in sentences:
+        text = (
+            "Which statement is directly supported by your uploaded notes?\n"
+            f"A) {sentence}\n"
+            "B) The notes say this point is unrelated to the topic.\n"
+            "C) The notes say no review is needed for this material.\n"
+            "D) The notes say the source contains no readable details."
+        )
+        if any(questions_are_duplicates(text, old) for old in seen):
+            continue
+        questions.append(GeneratedQuestion(text, "A", difficulty))
+        seen.append(text)
+        if len(questions) >= count:
+            break
+    if questions:
+        return questions
+    raise QuestionGenerationError("The notes did not contain enough readable text to create a question.")
+
+
+def _extract_note_sentences(text: str) -> list[str]:
+    cleaned = " ".join(text.split())
+    candidates = re.split(r"(?<=[.!?])\s+", cleaned)
+    sentences = []
+    for candidate in candidates:
+        sentence = candidate.strip(" -")
+        if 35 <= len(sentence) <= 220 and re.search(r"[A-Za-z]{3}", sentence):
+            sentences.append(sentence)
+    if not sentences and cleaned:
+        sentences.append(cleaned[:220].strip())
+    return sentences
 
 
 def questions_are_duplicates(first: str, second: str) -> bool:

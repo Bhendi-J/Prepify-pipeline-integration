@@ -49,6 +49,23 @@ class GenerationTests(unittest.TestCase):
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0].answer_text, "B")
 
+    def test_multiple_choice_falls_back_when_provider_fails(self):
+        note = "Redis stores queue messages for Celery workers so background jobs can run after uploads."
+        with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
+            client.return_value.chat_completion.side_effect = RuntimeError("provider down")
+            result = generate_questions([Chunk(content=note)], 2, "medium", "multiple_choice")
+            self.assertEqual(result[0].answer_text, "A")
+            self.assertIn("A)", result[0].question_text)
+
+    def test_multiple_choice_falls_back_when_provider_format_is_bad(self):
+        items = [{"question_text": "What does Redis do?", "answer_text": "Queue messages"}]
+        note = "Redis stores queue messages for Celery workers so background jobs can run after uploads."
+        with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
+            client.return_value.chat_completion.return_value = response(json.dumps({"questions": items}))
+            result = generate_questions([Chunk(content=note)], 1, "medium", "multiple_choice")
+            self.assertEqual(result[0].answer_text, "A")
+            self.assertIn("Redis stores queue messages", result[0].question_text)
+
     def test_long_summary_includes_the_end_of_the_notes(self):
         text = "first section " * 1500 + "IMPORTANT FINAL SECTION"
         with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
