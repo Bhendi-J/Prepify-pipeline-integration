@@ -88,8 +88,8 @@ def create_session(payload: SessionCreate, db: db_session, current_user: User = 
     existing = db.query(StudySession).filter_by(user_id=current_user.id, request_id=payload.request_id).first()
     if existing is not None:
         if (existing.topic_id, existing.document_id, existing.focus, existing.difficulty, existing.question_type,
-            db.query(Question).filter_by(session_id=existing.id).count()) != (
-            topic.id, payload.document_id, (payload.query or "").strip() or None, payload.difficulty, payload.question_type, payload.count):
+            ) != (
+            topic.id, payload.document_id, (payload.query or "").strip() or None, payload.difficulty, payload.question_type):
             raise HTTPException(409, "This generation request was already used with different settings")
         return get_session(existing.id, db, 1, 1, current_user)
     used = question_repo.count_generated_since(db, current_user.id, datetime.now(UTC) - timedelta(days=1))

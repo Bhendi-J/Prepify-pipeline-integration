@@ -145,7 +145,8 @@ A) option
 B) option
 C) option
 D) option
-Set answer_text to only the correct option label: A, B, C, or D."""
+Set answer_text to only the correct option label: A, B, C, or D.
+Do not put the option text in answer_text."""
     else:
         format_instruction = """For true_false include a statement and answer with True or False plus a brief explanation.
 For other types, the answer should be concise but complete."""
@@ -175,8 +176,10 @@ Previous questions to avoid:
     except Exception as exc:
         raise QuestionGenerationError("Question generation failed. Please try again.") from exc
     entries = payload.get("questions") if isinstance(payload, dict) else None
-    if not isinstance(entries, list) or len(entries) != count:
-        raise QuestionGenerationError("The notes did not produce the requested number of distinct questions. Try fewer questions or a different focus.")
+    if not isinstance(entries, list) or not entries:
+        raise QuestionGenerationError("The notes did not produce a usable question set. Try a smaller focus or re-upload clearer notes.")
+    if len(entries) > count:
+        entries = entries[:count]
     questions = []
     seen = list(previous_questions)
     for entry in entries:
@@ -185,19 +188,29 @@ Previous questions to avoid:
         text = entry["question_text"].strip()
         answer = entry["answer_text"].strip()
         if question_type == "multiple_choice":
-            _validate_multiple_choice(text, answer)
+            answer = _normalize_multiple_choice_answer(text, answer)
         if any(questions_are_duplicates(text, old) for old in seen):
             raise QuestionGenerationError("The model repeated an existing question. Try a different focus or fewer questions.")
         seen.append(text)
-        questions.append(GeneratedQuestion(text, answer[:1].upper(), difficulty))
+        questions.append(GeneratedQuestion(text, answer, difficulty))
     return questions
 
 
-def _validate_multiple_choice(question_text: str, answer_text: str) -> None:
-    labels = set(re.findall(r"(?im)^\s*([A-D])[\).:-]\s+\S", question_text))
-    answer = answer_text.strip().upper()[:1]
-    if labels != {"A", "B", "C", "D"} or answer not in labels:
+def _normalize_multiple_choice_answer(question_text: str, answer_text: str) -> str:
+    options: dict[str, str] = {}
+    for match in re.finditer(r"(?im)^\s*(?:[-*]\s*)?([A-D])[\).:-]\s+(.+)$", question_text):
+        options[match.group(1).upper()] = " ".join(match.group(2).casefold().split())
+    answer = answer_text.strip()
+    answer_label = answer.upper()[:1]
+    if set(options) == {"A", "B", "C", "D"} and answer_label in options:
+        return answer_label
+    normalized_answer = " ".join(answer.casefold().split())
+    for label, option_text in options.items():
+        if normalized_answer == option_text or normalized_answer.endswith(option_text):
+            return label
+    if set(options) != {"A", "B", "C", "D"}:
         raise QuestionGenerationError("The model did not return a valid multiple-choice set. Please try again.")
+    raise QuestionGenerationError("The model did not identify the correct multiple-choice option. Please try again.")
 
 
 def questions_are_duplicates(first: str, second: str) -> bool:

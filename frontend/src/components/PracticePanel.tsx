@@ -12,7 +12,7 @@ type Props = { token: string; topicId: number; documents: DocumentItem[]; view: 
 
 export default function PracticePanel({ token, topicId, documents, view, selectedDocumentId, onDocument, onView, onBusy, onError, onRecorded }: Props) {
   const [query, setQuery] = useState("");
-  const [count, setCount] = useState(3);
+  const [count, setCount] = useState(1);
   const [difficulty, setDifficulty] = useState("medium");
   const [questionType] = useState("multiple_choice");
   const [active, setActive] = useState<SessionQuestions | null>(null);
@@ -109,7 +109,7 @@ export default function PracticePanel({ token, topicId, documents, view, selecte
     });
   }
   async function chooseOption(label: string) {
-    if (!question || review?.result) return;
+    if (!question || review?.result?.is_correct) return;
     await run("choice", async () => {
       const submissionId = review?.submissionId ?? crypto.randomUUID();
       const responseTimeMs = Math.max(0, Date.now() - startedAt.current);
@@ -171,7 +171,7 @@ export default function PracticePanel({ token, topicId, documents, view, selecte
           {choices ? <><h3 className="notes-text">{choices.stem}</h3><div className="choice-grid">{choices.options.map((choice) => {
             const selected = review?.selectedOption === choice.label;
             const correct = review?.answer?.trim().toUpperCase().startsWith(choice.label);
-            return <button key={choice.label} className={review?.result ? correct ? "choice correct" : selected ? "choice missed" : "choice" : "choice"} disabled={operation !== null || !!review?.result} onClick={() => void chooseOption(choice.label)}><strong>{choice.label}</strong><span>{choice.text}</span></button>;
+            return <button key={choice.label} className={review?.result ? correct ? "choice correct" : selected ? "choice missed" : "choice" : "choice"} disabled={operation !== null || review?.result?.is_correct} onClick={() => void chooseOption(choice.label)}><strong>{choice.label}</strong><span>{choice.text}</span></button>;
           })}</div></> : <>
             <h3 className="notes-text">{question.question_text}</h3>
             <textarea placeholder="Type your answer before revealing the stored answer" rows={4} value={review?.draft ?? ""} disabled={operation !== null || review?.answer !== undefined} onChange={(event) => updateReview(question.id, { draft: event.target.value })} />
@@ -180,7 +180,7 @@ export default function PracticePanel({ token, topicId, documents, view, selecte
         </article>
         {review?.answer !== undefined && <article className="answer-box"><strong>Reference answer</strong><MarkdownContent>{review.answer}</MarkdownContent>
           {review.draft && <><strong>Your answer</strong><p className="notes-text">{review.draft}</p></>}
-          {review.result ? <p>Recorded as {review.result.is_correct ? "correct" : "missed"}. Next review {new Date(review.result.next_review_at).toLocaleString()}</p> : <>
+          {review.result ? <p>Recorded as {review.result.is_correct ? "correct" : "missed"}. {review.result.is_correct ? `Next review ${new Date(review.result.next_review_at).toLocaleString()}` : "Choose the correct option to clear it from Due Reviews."}</p> : <>
             <p className="muted">Compare with your answer and rate your recall. This is self-assessed; typed drafts are not saved after a page reload.</p>
             <div className="actions"><button disabled={operation !== null || review.rating === false} onClick={() => void rate(true)}>{review.rating === true ? "Retry correct rating" : "I got it right"}</button>
               <button disabled={operation !== null || review.rating === true} onClick={() => void rate(false)}>{review.rating === false ? "Retry missed rating" : "I missed it"}</button></div>
@@ -199,7 +199,7 @@ function parseChoices(questionText: string): { stem: string; options: Choice[] }
   const options: Choice[] = [];
   const stem: string[] = [];
   for (const line of lines) {
-    const match = line.match(/^([A-D])[\).:-]\s+(.+)$/i);
+    const match = line.match(/^(?:[-*]\s*)?([A-D])[\).:-]\s+(.+)$/i);
     if (match) options.push({ label: match[1].toUpperCase(), text: match[2].trim() });
     else if (options.length === 0) stem.push(line);
   }

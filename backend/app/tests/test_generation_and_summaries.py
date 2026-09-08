@@ -31,13 +31,23 @@ class GenerationTests(unittest.TestCase):
         for items, count, history in [
             ([{"question_text": "WHAT powers photosynthesis!", "answer_text": "Sunlight"}], 1, [old]),
             ([{"question_text": old, "answer_text": "Sunlight"}] * 2, 2, []),
-            ([{"question_text": old, "answer_text": "Sunlight"}], 3, []),
             ([{"question_text": old, "answer_text": None}], 1, []),
         ]:
             with self.subTest(items=items), patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
                 client.return_value.chat_completion.return_value = response(json.dumps({"questions": items}))
                 with self.assertRaises(QuestionGenerationError):
                     generate_questions([Chunk(content="Notes")], count, "medium", "short_answer", history)
+
+    def test_multiple_choice_answers_are_normalized(self):
+        items = [{
+            "question_text": "What does Redis do?\nA) Store style sheets\nB) Hold queue messages\nC) Compile TypeScript\nD) Host Postgres",
+            "answer_text": "B) Hold queue messages",
+        }]
+        with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
+            client.return_value.chat_completion.return_value = response(json.dumps({"questions": items}))
+            result = generate_questions([Chunk(content="Notes")], 3, "medium", "multiple_choice")
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result[0].answer_text, "B")
 
     def test_long_summary_includes_the_end_of_the_notes(self):
         text = "first section " * 1500 + "IMPORTANT FINAL SECTION"
