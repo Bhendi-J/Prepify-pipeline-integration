@@ -21,6 +21,8 @@ def process_document(document_id: int) -> None:
 
         text = extract_text(document.file_path)
         text_chunks = chunk_text(text)
+        if not text_chunks:
+            raise ValueError("The uploaded notes contain no readable text")
         embeddings = get_embeddings([chunk.content for chunk in text_chunks])
         db.refresh(document)
         replace_for_document(
@@ -49,3 +51,26 @@ def process_document(document_id: int) -> None:
         raise
     finally:
         db.close()
+
+
+@celery_app.task(name="summarize_document")
+def summarize_document(document_id: int) -> None:
+    from app.services.summarization import summarize_notes
+    with SessionLocal() as db:
+        document = db.query(Document).filter_by(id=document_id).with_for_update().first()
+        if document is None or document.summary_status != "pending":
+            return
+        document.summary_status = "processing"
+        db.commit()
+        try:
+            summary = summarize_notes(extract_text(document.file_path))
+            document.summary_text = summary
+            document.summary_status = "ready"
+            db.commit()
+        except Exception:
+            db.rollback()
+            document = db.get(Document, document_id)
+            if document is not None:
+                document.summary_status = "failed"
+                db.commit()
+            raise

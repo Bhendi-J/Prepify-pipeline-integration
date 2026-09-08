@@ -8,7 +8,7 @@ from app.database import db_session
 from app.models.user import User
 from app.repositories import attempt_repo, mastery_repo, question_repo, topic_repo
 from app.schemas.attempt import AttemptCreate, AttemptRead
-from app.schemas.question import PracticeQuestionRequest, QuestionCreate, QuestionPublic
+from app.schemas.question import PracticeQuestionRequest, QuestionAnswer, QuestionCreate, QuestionPublic
 from app.services.adaptive_engine import sm2_update
 from app.services.question_gen import QuestionGenerationError, generate_question
 from app.services.retrieval import similarity_search
@@ -127,6 +127,18 @@ def list_practice_questions(
     )
 
 
+@router.get("/{question_id}/answer", response_model=QuestionAnswer)
+def reveal_answer(
+    question_id: int,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> QuestionAnswer:
+    question = question_repo.get_by_id(db, question_id, user_id=current_user.id)
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return QuestionAnswer(question_id=question.id, answer_text=question.answer_text)
+
+
 @router.post(
     "/{question_id}/attempt",
     response_model=AttemptRead,
@@ -155,18 +167,30 @@ def submit_attempt(
         user_id=current_user.id,
         topic_id=question.topic_id,
     )
-    attempt = attempt_repo.create(
-        db,
-        attempt_data=attempt_in,
-        user_id=current_user.id,
-        question_id=question.id,
-        commit=False,
+    attempt = (
+        attempt_repo.get_by_submission(
+            db, current_user.id, question.id, attempt_in.submission_id
+        )
+        if attempt_in.submission_id is not None else None
     )
-    updated_state = sm2_update(
-        mastery_repo.to_state(mastery),
-        was_correct=attempt.is_correct,
-    )
-    mastery = mastery_repo.apply_state(db, mastery, updated_state)
+    if attempt is not None and (
+        attempt.is_correct != attempt_in.is_correct
+        or attempt.response_time_ms != attempt_in.response_time_ms
+    ):
+        raise HTTPException(status_code=409, detail="This review was already recorded with a different rating")
+    if attempt is None:
+        attempt = attempt_repo.create(
+            db,
+            attempt_data=attempt_in,
+            user_id=current_user.id,
+            question_id=question.id,
+            commit=False,
+        )
+        updated_state = sm2_update(
+            mastery_repo.to_state(mastery),
+            was_correct=attempt.is_correct,
+        )
+        mastery = mastery_repo.apply_state(db, mastery, updated_state)
 
     return AttemptRead(
         id=attempt.id,

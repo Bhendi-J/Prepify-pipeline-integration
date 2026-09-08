@@ -23,6 +23,11 @@ class QuestionPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class QuestionAnswer(BaseModel):
+    question_id: int
+    answer_text: str
+
+
 class PracticeQuestionRequest(BaseModel):
     query: str | None = Field(default=None, min_length=1)
     difficulty: str = Field(default="medium", max_length=50)

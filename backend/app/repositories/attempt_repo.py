@@ -1,7 +1,16 @@
 from sqlalchemy.orm import Session
+from uuid import UUID
 
 from app.models.attempt import Attempt
 from app.schemas.attempt import AttemptCreate
+
+
+def get_by_submission(
+    db: Session, user_id: int, question_id: int, submission_id: UUID
+) -> Attempt | None:
+    return db.query(Attempt).filter_by(
+        user_id=user_id, question_id=question_id, submission_id=submission_id
+    ).first()
 
 
 def create(

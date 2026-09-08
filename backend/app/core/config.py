@@ -20,6 +20,7 @@ class Settings(BaseSettings): #centralized application settings loaded from envi
     HUGGINGFACE_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     HUGGINGFACE_CHAT_PROVIDER: str = "auto"
     HUGGINGFACE_QUESTION_MODEL: str = "meta-llama/Llama-3.1-8B-Instruct"
+    HUGGINGFACE_SUMMARY_MODEL: str | None = None
     QUESTION_MAX_TOKENS: int = 180
     QUESTION_TEMPERATURE: float = 0.2
     MAX_QUESTION_GENERATIONS_PER_DAY: int = 20

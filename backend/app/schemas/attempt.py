@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field
 class AttemptCreate(BaseModel):
     is_correct: bool
     response_time_ms: int | None = Field(default=None, ge=0)
+    submission_id: UUID | None = None
 
 
 class AttemptRead(BaseModel):

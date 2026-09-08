@@ -1,12 +1,14 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Query, status
 
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.database import db_session
 from app.models.user import User
+from app.models.document import Document
+from app.services.ingestion import extract_text
 from app.repositories.document_repo import (
     create as create_document,
     get_by_id,
@@ -14,8 +16,8 @@ from app.repositories.document_repo import (
     update as update_document,
 )
 from app.repositories.topic_repo import get_by_id as get_topic_by_id
-from app.schemas.document import DocumentCreate, DocumentRead, DocumentUpdate
-from app.workers.tasks import process_document
+from app.schemas.document import DocumentCreate, DocumentRead, DocumentUpdate, DocumentContent, DocumentSummary
+from app.workers.tasks import process_document, summarize_document
 
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
@@ -141,3 +143,51 @@ def _save_upload(file: UploadFile, file_path: Path) -> None:
     except Exception:
         file_path.unlink(missing_ok=True)
         raise
+
+
+@router.get("/{document_id}/content", response_model=DocumentContent)
+def read_document_content(
+    document_id: int, db: db_session, page: int = Query(1, ge=1),
+    page_size: int = Query(4000, ge=500, le=8000), current_user: User = Depends(get_current_user),
+):
+    document = get_by_id(db, document_id, user_id=current_user.id)
+    if document is None:
+        raise HTTPException(404, "Document not found")
+    try:
+        text = extract_text(document.file_path)
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise HTTPException(422, "The original notes cannot be read") from exc
+    total_pages = max(1, (len(text) + page_size - 1) // page_size)
+    if page > total_pages:
+        raise HTTPException(404, "Notes page not found")
+    return DocumentContent(document_id=document.id, title=document.title,
+        content=text[(page - 1) * page_size:page * page_size], page=page, page_size=page_size,
+        total_pages=total_pages, total_characters=len(text))
+
+
+@router.get("/{document_id}/summary", response_model=DocumentSummary)
+def get_summary(document_id: int, db: db_session, current_user: User = Depends(get_current_user)):
+    document = get_by_id(db, document_id, user_id=current_user.id)
+    if document is None:
+        raise HTTPException(404, "Document not found")
+    return DocumentSummary(document_id=document.id, status=document.summary_status, summary=document.summary_text)
+
+
+@router.post("/{document_id}/summary", response_model=DocumentSummary, status_code=202)
+def request_summary(document_id: int, db: db_session, current_user: User = Depends(get_current_user)):
+    document = db.query(Document).filter_by(id=document_id, user_id=current_user.id).with_for_update().first()
+    if document is None:
+        raise HTTPException(404, "Document not found")
+    if document.status != "ready":
+        raise HTTPException(409, "Wait for these notes to finish processing")
+    if document.summary_status in {"ready", "pending", "processing"}:
+        return DocumentSummary(document_id=document.id, status=document.summary_status, summary=document.summary_text)
+    document.summary_status = "pending"
+    db.commit()
+    try:
+        summarize_document.delay(document.id)
+    except Exception as exc:
+        document.summary_status = "failed"
+        db.commit()
+        raise HTTPException(503, "The summary queue is unavailable. Please retry.") from exc
+    return DocumentSummary(document_id=document.id, status=document.summary_status, summary=document.summary_text)

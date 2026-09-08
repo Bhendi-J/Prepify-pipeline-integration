@@ -4,6 +4,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.models.study_session import StudySession
 
 
 class Question(Base):
@@ -14,6 +15,9 @@ class Question(Base):
         ForeignKey("topics.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("study_sessions.id", ondelete="SET NULL"), nullable=True, index=True
     )
     chunk_id: Mapped[int | None] = mapped_column(
         ForeignKey("chunks.id", ondelete="SET NULL"),

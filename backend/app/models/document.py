@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, func, ForeignKey
+from sqlalchemy import DateTime, Integer, String, Text, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -46,3 +46,6 @@ class Document(Base): #defining the documents table for application data
         DateTime(timezone=True), 
         server_default=func.now(), 
         nullable=False) #timestamp assigned by the database when the row is created
+
+    summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_status: Mapped[str] = mapped_column(String(50), default="none")

@@ -1,0 +1,54 @@
+import json
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+from app.core.config import settings
+from app.models.chunk import Chunk
+from app.services.question_gen import generate_questions, QuestionGenerationError
+from app.services.summarization import summarize_notes, SummaryError
+
+
+def response(content):
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+
+class GenerationTests(unittest.TestCase):
+    def test_batch_uses_one_model_call(self):
+        items = [
+            {"question_text": "What powers photosynthesis?", "answer_text": "Sunlight"},
+            {"question_text": "Where does water evaporate?", "answer_text": "From oceans"},
+            {"question_text": "Explain the role of chlorophyll.", "answer_text": "Absorbs light"},
+        ]
+        with patch.object(settings, "HF_TOKEN", "test-token"), patch("huggingface_hub.InferenceClient") as client:
+            client.return_value.chat_completion.return_value = response(json.dumps({"questions": items}))
+            result = generate_questions([Chunk(content="Study notes")], 3, "medium", "short_answer")
+            self.assertEqual(len(result), 3)
+            client.return_value.chat_completion.assert_called_once()
+
+    def test_duplicate_and_incomplete_batches_are_rejected(self):
+        old = "What powers photosynthesis?"
+        for items, count, history in [
+            ([{"question_text": "WHAT powers photosynthesis!", "answer_text": "Sunlight"}], 1, [old]),
+            ([{"question_text": old, "answer_text": "Sunlight"}] * 2, 2, []),
+            ([{"question_text": old, "answer_text": "Sunlight"}], 3, []),
+            ([{"question_text": old, "answer_text": None}], 1, []),
+        ]:
+            with self.subTest(items=items), patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
+                client.return_value.chat_completion.return_value = response(json.dumps({"questions": items}))
+                with self.assertRaises(QuestionGenerationError):
+                    generate_questions([Chunk(content="Notes")], count, "medium", "short_answer", history)
+
+    def test_long_summary_includes_the_end_of_the_notes(self):
+        text = "first section " * 1500 + "IMPORTANT FINAL SECTION"
+        with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
+            client.return_value.chat_completion.return_value = response("A concise summary")
+            self.assertEqual(summarize_notes(text), "A concise summary")
+            prompts = [call.kwargs["messages"][1]["content"] for call in client.return_value.chat_completion.call_args_list]
+            self.assertTrue(any("IMPORTANT FINAL SECTION" in prompt for prompt in prompts))
+            self.assertGreater(len(prompts), 1)
+            self.assertTrue(all(len(prompt) < 12200 for prompt in prompts))
+
+    def test_empty_notes_cannot_be_summarized(self):
+        with self.assertRaises(SummaryError):
+            summarize_notes("  \n ")

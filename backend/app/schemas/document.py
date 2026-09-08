@@ -25,3 +25,19 @@ class DocumentUpdate(BaseModel): #payload used when updating a document's status
     status: str | None = Field(default=None, max_length=50)
     title: str | None = Field(default=None, max_length=255)
     topic_id: int | None = None
+
+
+class DocumentContent(BaseModel):
+    document_id: int
+    title: str
+    content: str
+    page: int
+    page_size: int
+    total_pages: int
+    total_characters: int
+
+
+class DocumentSummary(BaseModel):
+    document_id: int
+    status: str
+    summary: str | None

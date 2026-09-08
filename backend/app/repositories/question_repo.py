@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.question import Question, QuestionChunk
 from app.models.topic import Topic
+from app.models.study_session import StudySession
 from app.schemas.question import QuestionCreate
 
 
@@ -14,7 +15,8 @@ def lock_generation_slot(
     topic_id: int,
     difficulty: str,
 ) -> None:
-    lock_key = f"practice-question:{user_id}:{topic_id}:{difficulty}"
+    # The generation quota is per user, so all generation paths share this lock.
+    lock_key = f"practice-question:{user_id}"
     db.execute(
         select(func.pg_advisory_xact_lock(func.hashtextextended(lock_key, 0)))
     )
@@ -91,7 +93,14 @@ def create(db: Session, question_data: QuestionCreate) -> Question:
     if not source_chunk_ids and payload["chunk_id"] is not None:
         source_chunk_ids = [payload["chunk_id"]]
 
-    question = Question(**payload)
+    # Legacy single-question clients still save into a browsable session.
+    topic = db.get(Topic, payload["topic_id"])
+    session = StudySession(user_id=topic.user_id, topic_id=topic.id,
+        title=f"{topic.name[:220]} — Practice", difficulty=payload["difficulty"],
+        question_type=payload["question_type"])
+    db.add(session)
+    db.flush()
+    question = Question(**payload, session_id=session.id)
     db.add(question)
     db.flush()
 

@@ -77,28 +77,61 @@ type RequestOptions = RequestInit & {
   token?: string | null;
 };
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (options.token) {
     headers.set("Authorization", `Bearer ${options.token}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL.replace(/\/$/, "")}${path}`, { ...options, headers });
+  } catch {
+    throw new ApiError("Cannot reach the server. Check your connection and try again.", 0);
+  }
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new ApiError(`The server returned an unexpected response (${response.status}). Try again.`, response.status);
+  }
 
   if (!response.ok) {
     const detail = data?.detail ?? response.statusText;
-    throw new Error(Array.isArray(detail) ? detail[0]?.msg ?? response.statusText : detail);
+    throw new ApiError(Array.isArray(detail) ? detail[0]?.msg ?? response.statusText : String(detail), response.status);
   }
 
   return data as T;
 }
 
 export const api = {
+  createSession(token: string, input: { topic_id: number; document_id: number | null; query?: string; count: number; difficulty: string; question_type: string; request_id: string }) {
+    return request<SessionQuestions>("/api/v1/study-sessions/", {
+      token, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+    });
+  },
+  listSessions(token: string, topicId: number, page = 1) {
+    return request<SessionPage>(`/api/v1/study-sessions/?topic_id=${topicId}&page=${page}&page_size=6`, { token });
+  },
+  getSession(token: string, id: number, page = 1) {
+    return request<SessionQuestions>(`/api/v1/study-sessions/${id}?page=${page}&page_size=1`, { token });
+  },
+  getDocumentContent(token: string, id: number, page = 1) {
+    return request<DocumentContent>(`/api/v1/documents/${id}/content?page=${page}`, { token });
+  },
+  getSummary(token: string, id: number) {
+    return request<DocumentSummary>(`/api/v1/documents/${id}/summary`, { token });
+  },
+  summarizeDocument(token: string, id: number) {
+    return request<DocumentSummary>(`/api/v1/documents/${id}/summary`, { token, method: "POST" });
+  },
   register(email: string, password: string) {
     return request<User>("/api/v1/auth/register", {
       method: "POST",
@@ -175,7 +208,10 @@ export const api = {
   listQuestions(token: string, topicId: number) {
     return request<Question[]>(`/api/v1/practice/${topicId}/questions`, { token });
   },
-  submitAttempt(token: string, questionId: number, input: { is_correct: boolean; response_time_ms?: number }) {
+  revealAnswer(token: string, questionId: number) {
+    return request<{ question_id: number; answer_text: string }>(`/api/v1/practice/${questionId}/answer`, { token });
+  },
+  submitAttempt(token: string, questionId: number, input: { is_correct: boolean; response_time_ms?: number; submission_id: string }) {
     return request<AttemptResult>(`/api/v1/practice/${questionId}/attempt`, {
       token,
       method: "POST",
@@ -190,3 +226,13 @@ export const api = {
     return request<Mastery>(`/api/v1/progress/${topicId}`, { token });
   },
 };
+
+export type StudySession = {
+  id: number; topic_id: number; document_id: number | null; title: string;
+  focus: string | null; difficulty: string; question_type: string;
+  is_legacy: boolean; created_at: string; question_count: number;
+};
+export type SessionPage = { items: StudySession[]; total: number; page: number; page_size: number };
+export type SessionQuestions = { attempts: AttemptResult[]; session: StudySession; items: Question[]; total: number; page: number; page_size: number };
+export type DocumentContent = { document_id: number; title: string; content: string; page: number; page_size: number; total_pages: number; total_characters: number };
+export type DocumentSummary = { document_id: number; status: string; summary: string | null };
