@@ -182,6 +182,7 @@ Previous questions to avoid:
         text = entry["question_text"].strip()
         answer = entry["answer_text"].strip()
         if question_type == "multiple_choice":
+            text = _normalize_multiple_choice_text(text)
             try:
                 answer = _normalize_multiple_choice_answer(text, answer)
             except QuestionGenerationError:
@@ -191,6 +192,13 @@ Previous questions to avoid:
         seen.append(text)
         questions.append(GeneratedQuestion(text, answer, difficulty))
     return questions
+
+
+def _normalize_multiple_choice_text(question_text: str) -> str:
+    text = " ".join(question_text.split())
+    text = re.sub(r"\s+([A-D])[\).:-]\s+", r"\n\1) ", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?<!^)([A-D])[\).:-]\s+", r"\n\1) ", text, flags=re.IGNORECASE)
+    return text.strip()
 
 
 def _generate_question_payload(prompt: str, count: int) -> dict:

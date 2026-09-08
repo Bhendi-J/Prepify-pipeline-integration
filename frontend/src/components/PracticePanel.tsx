@@ -195,7 +195,8 @@ export default function PracticePanel({ token, topicId, documents, view, selecte
 }
 
 function parseChoices(questionText: string): { stem: string; options: Choice[] } | null {
-  const lines = questionText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const normalized = questionText.replace(/\s+([A-D])[\).:-]\s+/gi, "\n$1) ");
+  const lines = normalized.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const options: Choice[] = [];
   const stem: string[] = [];
   for (const line of lines) {

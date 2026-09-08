@@ -40,7 +40,7 @@ class GenerationTests(unittest.TestCase):
 
     def test_multiple_choice_answers_are_normalized(self):
         items = [{
-            "question_text": "What does Redis do?\nA) Store style sheets\nB) Hold queue messages\nC) Compile TypeScript\nD) Host Postgres",
+            "question_text": "What does Redis do? A) Store style sheets B) Hold queue messages C) Compile TypeScript D) Host Postgres",
             "answer_text": "B) Hold queue messages",
         }]
         with patch.object(settings, "HF_TOKEN", "test"), patch("huggingface_hub.InferenceClient") as client:
@@ -48,6 +48,7 @@ class GenerationTests(unittest.TestCase):
             result = generate_questions([Chunk(content="Notes")], 3, "medium", "multiple_choice")
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0].answer_text, "B")
+            self.assertIn("\nA)", result[0].question_text)
 
     def test_multiple_choice_falls_back_when_provider_fails(self):
         note = "Redis stores queue messages for Celery workers so background jobs can run after uploads."
