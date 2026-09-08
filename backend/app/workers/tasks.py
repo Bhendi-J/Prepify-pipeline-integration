@@ -3,7 +3,7 @@ from app.models.document import Document
 from app.models.topic import Topic
 from app.models.user import User
 from app.repositories.chunk_repo import replace_for_document
-from app.services.ingestion import chunk_text, extract_text
+from app.services.ingestion import EmptyDocumentTextError, chunk_text, extract_text
 from app.services.llm_client import get_embeddings
 from app.workers.celery_app import celery_app
 
@@ -22,7 +22,7 @@ def process_document(document_id: int) -> None:
         text = extract_text(document.file_path)
         text_chunks = chunk_text(text)
         if not text_chunks:
-            raise ValueError("The uploaded notes contain no readable text")
+            raise EmptyDocumentTextError("The uploaded notes contain no readable text")
         embeddings = get_embeddings([chunk.content for chunk in text_chunks])
         db.refresh(document)
         replace_for_document(

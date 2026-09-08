@@ -24,7 +24,7 @@ class Settings(BaseSettings): #centralized application settings loaded from envi
     QUESTION_MAX_TOKENS: int = 180
     QUESTION_TEMPERATURE: float = 0.2
     MAX_QUESTION_GENERATIONS_PER_DAY: int = 20
-    MAX_UPLOAD_BYTES: int = 1_000_000
+    MAX_UPLOAD_BYTES: int = 10_000_000
     CORS_ORIGINS: str = "http://127.0.0.1:5173,http://localhost:5173"
 
 

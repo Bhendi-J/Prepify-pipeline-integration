@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from app.services.ingestion import UnsupportedDocumentTypeError, chunk_text, extract_text
+from app.services.ingestion import EmptyDocumentTextError, UnsupportedDocumentTypeError, chunk_text, extract_text
 
 
 class IngestionTests(unittest.TestCase):
@@ -35,6 +35,19 @@ class IngestionTests(unittest.TestCase):
                 reader.return_value.pages = [first_page, second_page]
 
                 self.assertEqual(extract_text(str(path)), "first page\n\nsecond page")
+
+    def test_extract_text_rejects_image_only_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "scan.pdf"
+            path.write_bytes(b"%PDF-1.4")
+
+            with patch("app.services.ingestion.PdfReader") as reader:
+                page = Mock()
+                page.extract_text.return_value = ""
+                reader.return_value.pages = [page]
+
+                with self.assertRaises(EmptyDocumentTextError):
+                    extract_text(str(path))
 
     def test_chunk_text_applies_overlap(self) -> None:
         chunks = chunk_text(

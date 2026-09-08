@@ -8,7 +8,7 @@ from app.core.config import settings
 from app.database import db_session
 from app.models.user import User
 from app.models.document import Document
-from app.services.ingestion import extract_text
+from app.services.ingestion import EmptyDocumentTextError, extract_text
 from app.repositories.document_repo import (
     create as create_document,
     delete as delete_document,
@@ -176,6 +176,8 @@ def read_document_content(
         raise HTTPException(404, "Document not found")
     try:
         text = extract_text(document.file_path)
+    except EmptyDocumentTextError as exc:
+        raise HTTPException(422, str(exc)) from exc
     except (OSError, UnicodeError, ValueError) as exc:
         raise HTTPException(422, "The original notes cannot be read") from exc
     total_pages = max(1, (len(text) + page_size - 1) // page_size)

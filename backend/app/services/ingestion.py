@@ -8,6 +8,10 @@ class UnsupportedDocumentTypeError(ValueError):
     pass
 
 
+class EmptyDocumentTextError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class TextChunk:
     content: str
@@ -28,7 +32,12 @@ def extract_text(file_path: str) -> str:
 def _extract_pdf_text(path: Path) -> str:
     reader = PdfReader(str(path))
     pages = [page.extract_text() or "" for page in reader.pages]
-    return "\n\n".join(page.strip() for page in pages if page.strip())
+    text = "\n\n".join(page.strip() for page in pages if page.strip())
+    if not text.strip():
+        raise EmptyDocumentTextError(
+            "This PDF does not contain extractable text. Scanned PDFs need OCR support."
+        )
+    return text
 
 
 def chunk_text(
