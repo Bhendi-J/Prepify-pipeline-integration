@@ -73,6 +73,20 @@ export type DueTopic = {
   streak: number;
 };
 
+export type ActivityDay = {
+  date: string;
+  attempted: number;
+  correct: number;
+};
+
+export type ProgressStats = {
+  attempted: number;
+  correct: number;
+  accuracy: number;
+  activity_streak: number;
+  days: ActivityDay[];
+};
+
 type RequestOptions = RequestInit & {
   token?: string | null;
 };
@@ -166,6 +180,9 @@ export const api = {
   getDocument(token: string, id: number) {
     return request<DocumentItem>(`/api/v1/documents/${id}`, { token });
   },
+  deleteDocument(token: string, id: number) {
+    return request<void>(`/api/v1/documents/${id}`, { token, method: "DELETE" });
+  },
   uploadDocument(token: string, input: { title: string; topic_id: number | null; file: File }) {
     const form = new FormData();
     form.set("title", input.title);
@@ -221,6 +238,9 @@ export const api = {
   },
   getDue(token: string) {
     return request<DueTopic[]>("/api/v1/progress/due", { token });
+  },
+  getStats(token: string) {
+    return request<ProgressStats>("/api/v1/progress/stats", { token });
   },
   getProgress(token: string, topicId: number) {
     return request<Mastery>(`/api/v1/progress/${topicId}`, { token });

@@ -44,3 +44,8 @@ def update(db: Session, document: Document, document_data: DocumentUpdate) -> Do
     db.commit()
     db.refresh(document)
     return document
+
+
+def delete(db: Session, document: Document) -> None:
+    db.delete(document)
+    db.commit()

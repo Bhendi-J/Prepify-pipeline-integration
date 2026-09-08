@@ -98,6 +98,31 @@ class RouteTests(unittest.TestCase):
         delay.assert_called_once_with(body["id"])
         self.upload_paths.append(Path("uploads") / Path(body["file_path"]).name)
 
+    def test_documents_delete_removes_owned_note_and_file(self) -> None:
+        owner = self._create_user()
+        intruder = self._create_user()
+        topic, _ = self._create_topic_question(owner.id)
+        document = self._ready_notes(owner.id, topic.id)
+        path = Path(document.file_path)
+
+        blocked = self.client.delete(
+            f"/api/v1/documents/{document.id}",
+            headers=self._auth_headers(intruder.id),
+        )
+        self.assertEqual(blocked.status_code, 404)
+        self.assertTrue(path.exists())
+
+        deleted = self.client.delete(
+            f"/api/v1/documents/{document.id}",
+            headers=self._auth_headers(owner.id),
+        )
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(path.exists())
+
+        listed = self.client.get("/api/v1/documents/", headers=self._auth_headers(owner.id))
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(listed.json(), [])
+
     def test_practice_attempt_updates_progress_and_hides_foreign_answers(self) -> None:
         owner = self._create_user()
         intruder = self._create_user()
@@ -136,6 +161,31 @@ class RouteTests(unittest.TestCase):
         due = self.client.get("/api/v1/progress/due", headers=self._auth_headers(owner.id))
         self.assertEqual(due.status_code, 200)
         self.assertEqual(due.json(), [])
+
+    def test_missed_attempt_is_due_and_stats_include_activity(self) -> None:
+        owner = self._create_user()
+        topic, question = self._create_topic_question(owner.id)
+        headers = self._auth_headers(owner.id)
+
+        attempt = self.client.post(
+            f"/api/v1/practice/{question.id}/attempt",
+            headers=headers,
+            json={"is_correct": False, "response_time_ms": 1200},
+        )
+        self.assertEqual(attempt.status_code, 201)
+        self.assertFalse(attempt.json()["is_correct"])
+
+        due = self.client.get("/api/v1/progress/due", headers=headers)
+        self.assertEqual(due.status_code, 200)
+        self.assertEqual(due.json()[0]["topic_id"], topic.id)
+
+        stats = self.client.get("/api/v1/progress/stats", headers=headers)
+        self.assertEqual(stats.status_code, 200)
+        body = stats.json()
+        self.assertEqual(body["attempted"], 1)
+        self.assertEqual(body["correct"], 0)
+        self.assertEqual(body["activity_streak"], 1)
+        self.assertEqual(body["days"][-1]["attempted"], 1)
 
     def test_upload_to_practice_flow(self) -> None:
         owner = self._create_user()

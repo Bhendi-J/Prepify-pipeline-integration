@@ -11,6 +11,7 @@ from app.models.document import Document
 from app.services.ingestion import extract_text
 from app.repositories.document_repo import (
     create as create_document,
+    delete as delete_document,
     get_by_id,
     get_by_user_id,
     update as update_document,
@@ -81,6 +82,24 @@ def get_document(
             detail="Document not found",
         )
     return document
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document_endpoint(
+    document_id: int,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    document = get_by_id(db, document_id, user_id=current_user.id)
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found",
+        )
+
+    file_path = Path(document.file_path)
+    delete_document(db, document)
+    file_path.unlink(missing_ok=True)
 
 
 @router.patch("/{document_id}", response_model=DocumentRead)

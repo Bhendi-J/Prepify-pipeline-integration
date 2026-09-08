@@ -22,3 +22,17 @@ class DueTopicRead(BaseModel):
     interval_days: int
     next_review_at: datetime
     streak: int
+
+
+class ActivityDayRead(BaseModel):
+    date: str
+    attempted: int
+    correct: int
+
+
+class ProgressStatsRead(BaseModel):
+    attempted: int
+    correct: int
+    accuracy: float
+    activity_streak: int
+    days: list[ActivityDayRead]

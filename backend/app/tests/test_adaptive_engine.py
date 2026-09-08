@@ -25,9 +25,9 @@ class AdaptiveEngineTests(unittest.TestCase):
         updated = sm2_update(state, was_correct=False, now=now)
 
         self.assertEqual(updated.streak, 0)
-        self.assertEqual(updated.interval_days, 1)
+        self.assertEqual(updated.interval_days, 0)
         self.assertEqual(updated.ease_factor, 2.3)
-        self.assertEqual(updated.next_review_at, now + timedelta(days=1))
+        self.assertEqual(updated.next_review_at, now)
 
 
 if __name__ == "__main__":

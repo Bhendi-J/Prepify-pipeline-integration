@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { BookOpen, LogOut, Plus, RefreshCw, Upload, FileText, FolderOpen, Sparkles, Layers, CheckCircle2, Clock } from "lucide-react";
-import { api, ApiError, DocumentItem, DueTopic, Mastery, Topic } from "./api";
+import { BookOpen, LogOut, Plus, RefreshCw, Upload, FileText, FolderOpen, Sparkles, Layers, Trash2, Flame, Target, Trophy } from "lucide-react";
+import { api, ApiError, DocumentItem, DueTopic, ProgressStats, Topic } from "./api";
 import DocumentReader from "./components/DocumentReader";
 import PracticePanel from "./components/PracticePanel";
 
@@ -15,8 +15,8 @@ export default function App() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [dueTopics, setDueTopics] = useState<DueTopic[]>([]);
+  const [stats, setStats] = useState<ProgressStats | null>(null);
   const [topicId, setTopicId] = useState<number | null>(null);
-  const [progress, setProgress] = useState<Mastery | null>(null);
   const [view, setView] = useState<View>("practice");
   const [readerId, setReaderId] = useState<number | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
@@ -46,8 +46,8 @@ export default function App() {
     epoch.current += 1;
     busy.current = false;
     localStorage.removeItem("prepify_token");
-    setToken(null); setTopics([]); setDocuments([]); setDueTopics([]); setTopicId(null);
-    setReaderId(null); setSelectedDocumentId(null); setProgress(null); setNewTopic("");
+    setToken(null); setTopics([]); setDocuments([]); setDueTopics([]); setStats(null); setTopicId(null);
+    setReaderId(null); setSelectedDocumentId(null); setNewTopic("");
     setUploadTitle(""); setUploadFile(null); setPassword(""); setNotice(null);
     setOperation(null); setWorkspaceLoading(false); setPracticeBusy(false);
     setNotesFilter(""); setNotesPage(1); setView("practice");
@@ -65,10 +65,10 @@ export default function App() {
     const version = epoch.current;
     const current = () => !cancelled && version === epoch.current;
     setWorkspaceLoading(true);
-    void Promise.all([api.listTopics(token), api.listDocuments(token), api.getDue(token)])
-      .then(([topicRows, documentRows, dueRows]) => {
+    void Promise.all([api.listTopics(token), api.listDocuments(token), api.getDue(token), api.getStats(token)])
+      .then(([topicRows, documentRows, dueRows, statsRow]) => {
         if (!current()) return;
-        setTopics(topicRows); setDocuments(documentRows); setDueTopics(dueRows);
+        setTopics(topicRows); setDocuments(documentRows); setDueTopics(dueRows); setStats(statsRow);
         setTopicId((id) => topicRows.some((row) => row.id === id) ? id : topicRows[0]?.id ?? null);
       }).catch((error) => { if (current()) showError(error); })
       .finally(() => { if (current()) setWorkspaceLoading(false); });
@@ -79,8 +79,7 @@ export default function App() {
     if (!token || topicId === null) return;
     let cancelled = false;
     const version = epoch.current;
-    setProgress(null);
-    void api.getProgress(token, topicId).then((row) => { if (!cancelled && version === epoch.current) setProgress(row); })
+    void api.getDue(token).then((rows) => { if (!cancelled && version === epoch.current) setDueTopics(rows); })
       .catch((error) => { if (!cancelled && version === epoch.current) showError(error); });
     return () => { cancelled = true; };
   }, [token, topicId, refreshVersion]);
@@ -152,10 +151,21 @@ export default function App() {
   async function refreshProgress() {
     if (!token || topicId === null) return;
     const version = epoch.current;
-    const [row, due] = await Promise.all([api.getProgress(token, topicId), api.getDue(token)]);
-    if (version === epoch.current) { setProgress(row); setDueTopics(due); }
+    const [due, statsRow] = await Promise.all([api.getDue(token), api.getStats(token)]);
+    if (version === epoch.current) { setDueTopics(due); setStats(statsRow); }
   }
   function practiceDocument(id: number) { setSelectedDocumentId(id); setReaderId(null); setView("practice"); setNotice(null); }
+  async function deleteNote(doc: DocumentItem) {
+    if (!token || !window.confirm(`Delete "${doc.title}"? This removes the note from your library.`)) return;
+    await run("delete-note", async (current) => {
+      await api.deleteDocument(token, doc.id);
+      if (!current()) return;
+      setDocuments((rows) => rows.filter((row) => row.id !== doc.id));
+      if (readerId === doc.id) setReaderId(null);
+      if (selectedDocumentId === doc.id) setSelectedDocumentId(null);
+      setNotice({ type: "ok", message: "Note deleted." });
+    });
+  }
 
   if (!token) return <main className="auth-page"><section className="auth-panel">
     <div className="auth-intro"><span className="auth-icon"><BookOpen size={36} aria-hidden="true" /></span><p className="eyebrow">YOUR PERSONAL STUDY SPACE</p><h1>Small sessions.<br />Lasting knowledge.</h1><p className="muted">Read summaries, practice in focused sessions, and revisit your progress.</p></div>
@@ -178,25 +188,45 @@ export default function App() {
       <header className="topbar"><div><p className="eyebrow">Workspace / {reader ? "Notes reader" : view === "history" ? "Study sessions" : view === "notes" ? "Your library" : "Practice"}</p><h1>{topic?.name ?? "Create a topic"}</h1><p className="page-description">{view === "notes" ? "Everything you need to learn, in one place." : view === "history" ? "Pick up where you left off. See how far you’ve come." : "Build understanding. One focused session at a time."}</p></div><button className="ghost" disabled={loading} onClick={() => setRefreshVersion((value) => value + 1)}><RefreshCw size={18} />Refresh</button></header>
       {notice && <div role="alert" className={`notice ${notice.type}`}>{notice.message}<button title="Dismiss" onClick={() => setNotice(null)}>×</button></div>}
       {(operation || workspaceLoading) && <p role="status" className="muted">{operation === "upload" ? "Uploading notes…" : "Loading…"}</p>}
-      {!reader && <div className="overview-strip">
-        <div><FileText size={18} aria-hidden="true" /><span>Topic notes</span><strong>{topicDocuments.length}</strong></div>
-        <div><CheckCircle2 size={18} aria-hidden="true" /><span>Ready to study</span><strong>{topicDocuments.filter(doc => doc.status === "ready").length}</strong></div>
-        <div><Clock size={18} aria-hidden="true" /><span>Reviews due</span><strong>{dueTopics.length}</strong></div>
-      </div>}
+      {!reader && <ActivityBoard stats={stats} />}
       <div className="workspace-tabs" role="tablist" aria-label="Topic workspace">{([['notes', 'Notes'], ['practice', 'Practice'], ['history', 'Study sessions']] as const).map(([id, title]) => <button key={id} role="tab" aria-selected={view === id && !reader} disabled={loading} onClick={() => { setReaderId(null); setView(id); setNotice(null); }}>{id === "notes" ? <FileText size={17} aria-hidden="true" /> : id === "practice" ? <Sparkles size={17} aria-hidden="true" /> : <Layers size={17} aria-hidden="true" />}{title}</button>)}</div>
       {reader ? <DocumentReader key={`${token}:${reader.id}`} token={token} document={reader} onBack={() => setReaderId(null)} onPractice={() => practiceDocument(reader.id)} onError={showError} /> : <>
         {view === "notes" && <section className="panel">
           <div><h2>Your notes</h2><p className="muted">Open a document for its summary and paginated original, or practice just those notes.</p></div>
           <form className="upload-form" onSubmit={upload}><input aria-label="Document title" placeholder="Document title" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} /><input ref={fileInput} type="file" accept=".txt" disabled={loading || !topicId} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /><button className="primary" disabled={loading || !topicId || !uploadFile}><Upload size={18} />Upload</button></form>
           <input placeholder="Filter notes by title" aria-label="Filter notes by title" value={notesFilter} onChange={(event) => { setNotesFilter(event.target.value); setNotesPage(1); }} />
-          <div className="session-grid">{filteredNotes.slice((displayedNotesPage - 1) * 6, displayedNotesPage * 6).map((doc) => <article className="session-card" key={doc.id}><div className="card-top"><span className="card-icon"><FileText size={22} aria-hidden="true" /></span><span className={`status-pill status-${doc.status}`}>{doc.status}</span></div><h3>{doc.title}</h3><p className="muted">{doc.status === "failed" ? "Processing failed. Please re-upload the notes." : doc.status}</p><div className="actions"><button onClick={() => setReaderId(doc.id)}>Read notes</button><button disabled={doc.status !== "ready"} onClick={() => practiceDocument(doc.id)}>Practice these notes</button></div></article>)}</div>
+          <div className="session-grid">{filteredNotes.slice((displayedNotesPage - 1) * 6, displayedNotesPage * 6).map((doc) => <article className="session-card" key={doc.id}><div className="card-top"><span className="card-icon"><FileText size={22} aria-hidden="true" /></span><span className={`status-pill status-${doc.status}`}>{doc.status}</span></div><h3>{doc.title}</h3><p className="muted">{doc.status === "failed" ? "Processing failed. Please re-upload the notes." : doc.status}</p><div className="actions"><button onClick={() => setReaderId(doc.id)}>Read notes</button><button disabled={doc.status !== "ready"} onClick={() => practiceDocument(doc.id)}>Practice these notes</button><button className="icon danger" title="Delete note" aria-label={`Delete ${doc.title}`} disabled={loading} onClick={() => void deleteNote(doc)}><Trash2 size={16} aria-hidden="true" /></button></div></article>)}</div>
           {filteredNotes.length === 0 && <p className="empty-state">{notesFilter ? "No notes match this title." : "Upload a .txt file to get started."}</p>}
           {notePages > 1 && <div className="pagination"><button disabled={displayedNotesPage === 1} onClick={() => setNotesPage(displayedNotesPage - 1)}>Previous notes</button><span>Page {displayedNotesPage} of {notePages}</span><button disabled={displayedNotesPage === notePages} onClick={() => setNotesPage(displayedNotesPage + 1)}>Next notes</button></div>}
         </section>}
       </>}
       {topicId !== null && <div hidden={!!reader}><PracticePanel key={`${token}:${topicId}`} token={token} topicId={topicId} documents={topicDocuments} view={reader ? "notes" : view} selectedDocumentId={selectedDocumentId} onDocument={setSelectedDocumentId} onView={setView} onBusy={setPracticeBusy} onError={showError} onRecorded={refreshProgress} /></div>}
       {!topicId && <p className="empty-state">Create a topic using the sidebar, then upload your notes.</p>}
-      {!reader && view === "practice" && <section className="panel due-panel"><div className="topbar"><h2>Due Reviews</h2><span className="muted">{dueTopics.length} due · Current topic streak {progress?.streak ?? 0}</span></div>{dueTopics.length === 0 ? <p className="muted">No scheduled reviews are due.</p> : <div className="session-grid">{dueTopics.map((row) => <button className="due-item" key={row.topic_id} disabled={loading} onClick={() => { selectTopic(row.topic_id); setView("history"); }}><strong>{row.name}</strong><span>Open sessions to review</span></button>)}</div>}</section>}
+      {!reader && view === "practice" && <section className="panel due-panel"><div className="topbar"><h2>Due Reviews</h2><span className="muted">{dueTopics.length ? "Missed topics stay here until you revisit them." : "No missed reviews waiting."}</span></div>{dueTopics.length === 0 ? <p className="muted">When you mark a question as missed, its topic comes back here right away.</p> : <div className="session-grid">{dueTopics.map((row) => <button className="due-item" key={row.topic_id} disabled={loading} onClick={() => { selectTopic(row.topic_id); setView("history"); }}><strong>{row.name}</strong><span>Open sessions to review missed material</span></button>)}</div>}</section>}
     </section>
   </main>;
+}
+
+function ActivityBoard({ stats }: { stats: ProgressStats | null }) {
+  const days = stats?.days ?? Array.from({ length: 35 }, (_, index) => ({ date: "", attempted: 0, correct: 0 }));
+  return <section className="activity-board" aria-label="Study activity">
+    <div className="activity-head">
+      <div><p className="eyebrow">Activity</p><h2>Practice momentum</h2></div>
+      <div className="activity-stats">
+        <span><Trophy size={16} aria-hidden="true" />{stats?.correct ?? 0} solved correctly</span>
+        <span><Target size={16} aria-hidden="true" />{Math.round((stats?.accuracy ?? 0) * 100)}% accuracy</span>
+        <span><Flame size={16} aria-hidden="true" />{stats?.activity_streak ?? 0} day streak</span>
+      </div>
+    </div>
+    <div className="activity-grid" aria-hidden="true">
+      {days.map((day, index) => <span key={`${day.date}-${index}`} className={`activity-cell level-${activityLevel(day.attempted)}`} title={day.date ? `${day.date}: ${day.correct}/${day.attempted} correct` : "No activity"} />)}
+    </div>
+  </section>;
+}
+
+function activityLevel(attempted: number) {
+  if (attempted >= 5) return 4;
+  if (attempted >= 3) return 3;
+  if (attempted >= 1) return 2;
+  return 0;
 }

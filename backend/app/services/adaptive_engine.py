@@ -21,8 +21,8 @@ def sm2_update(
         return replace(
             mastery_row,
             ease_factor=max(1.3, mastery_row.ease_factor - 0.2),
-            interval_days=1,
-            next_review_at=current_time + timedelta(days=1),
+            interval_days=0,
+            next_review_at=current_time,
             streak=0,
         )
 

@@ -57,11 +57,16 @@ h3 { font-size: 1rem; line-height: 1.6; font-weight: 600; }
 .workspace { min-width: 0; width: 100%; max-width: 1370px; margin: 0 auto; padding: 42px clamp(20px, 4vw, 62px); display: grid; align-content: start; gap: 25px; }
 .topbar, .actions, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .workspace > .topbar { margin-bottom: 4px; }
-.overview-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); border-radius: 12px; background: var(--line); overflow: hidden; }
-.overview-strip > div { display: flex; gap: 10px; align-items: center; padding: 17px 20px; background: #131b26; }
-.overview-strip svg { color: #8399b4; flex-shrink: 0; }
-.overview-strip span { color: #a4b3c7; font-size: .75rem; }
-.overview-strip strong { margin-left: auto; font-size: 1.2rem; font-weight: 600; }
+.activity-board { display: grid; gap: 18px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: #111a25; }
+.activity-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.activity-stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.activity-stats span { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 7px 10px; border: 1px solid #304153; border-radius: 7px; background: #172331; color: #c8d6e8; font-size: .76rem; }
+.activity-stats svg { color: var(--accent); }
+.activity-grid { display: grid; grid-template-columns: repeat(35, minmax(8px, 1fr)); gap: 5px; align-items: center; }
+.activity-cell { display: block; width: 100%; aspect-ratio: 1; min-width: 8px; max-width: 18px; border-radius: 4px; background: #243042; border: 1px solid #314054; }
+.activity-cell.level-2 { background: #24513f; border-color: #32684f; }
+.activity-cell.level-3 { background: #3a8060; border-color: #4a9974; }
+.activity-cell.level-4 { background: #8bdfc1; border-color: #b4f4de; box-shadow: 0 0 0 2px #8bdfc11f; }
 .workspace-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); }
 .workspace-tabs button { position: relative; border: 0; background: transparent; border-radius: 0; color: #99a9bf; padding: 0 4px 16px; font-size: .83rem; }
 .workspace-tabs button:hover:not(:disabled) { background: transparent; color: #fff; }
@@ -91,6 +96,9 @@ h3 { font-size: 1rem; line-height: 1.6; font-weight: 600; }
 .session-card > button, .session-card > .actions { margin-top: auto; }
 .session-card .actions { gap: 7px; justify-content: flex-start; }
 .session-card .actions button { font-size: .73rem; padding: 8px 10px; min-height: 36px; }
+.session-card .actions .icon { width: 36px; padding: 8px; margin-left: auto; }
+.danger { color: #f2a9b5; border-color: #633843; background: #2a1820; }
+.danger:hover:not(:disabled) { color: #ffd2d9; border-color: #8b5260; background: #3a2029; }
 .card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card-icon { display: grid; place-items: center; width: 40px; height: 40px; background: #273750; border: 1px solid #3a4b65; border-radius: 10px; color: #b0c8f0; }
 .status-pill { font-size: .65rem; border-radius: 20px; padding: 4px 9px; background: #343329; color: #e6ce8f; border: 1px solid #5b5033; text-transform: capitalize; }

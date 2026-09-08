@@ -1,15 +1,73 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import get_current_user
 from app.database import db_session
+from app.models.attempt import Attempt
+from app.models.question import Question
+from app.models.topic import Topic
 from app.models.user import User
 from app.repositories import mastery_repo, topic_repo
-from app.schemas.mastery import DueTopicRead, MasteryRead
+from app.schemas.mastery import ActivityDayRead, DueTopicRead, MasteryRead, ProgressStatsRead
 
 
 router = APIRouter(prefix="/api/v1/progress", tags=["progress"])
+
+
+@router.get("/stats", response_model=ProgressStatsRead)
+def get_progress_stats(
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> ProgressStatsRead:
+    today = datetime.now(UTC).date()
+    first_day = today - timedelta(days=34)
+    window_start = datetime.combine(first_day, datetime.min.time(), tzinfo=UTC)
+    attempts = (
+        db.query(Attempt)
+        .join(Question, Question.id == Attempt.question_id)
+        .join(Topic, Topic.id == Question.topic_id)
+        .filter(
+            Attempt.user_id == current_user.id,
+            Topic.user_id == current_user.id,
+            Attempt.created_at >= window_start,
+        )
+        .all()
+    )
+    totals = (
+        db.query(Attempt)
+        .join(Question, Question.id == Attempt.question_id)
+        .join(Topic, Topic.id == Question.topic_id)
+        .filter(Attempt.user_id == current_user.id, Topic.user_id == current_user.id)
+        .all()
+    )
+
+    by_day: dict[date, dict[str, int]] = {}
+    for attempt in attempts:
+        attempted_at = attempt.created_at
+        if attempted_at.tzinfo is None:
+            attempted_at = attempted_at.replace(tzinfo=UTC)
+        attempted_on = attempted_at.astimezone(UTC).date()
+        row = by_day.setdefault(attempted_on, {"attempted": 0, "correct": 0})
+        row["attempted"] += 1
+        if attempt.is_correct:
+            row["correct"] += 1
+
+    days = []
+    for offset in range(35):
+        day = first_day + timedelta(days=offset)
+        row = by_day.get(day, {"attempted": 0, "correct": 0})
+        days.append(ActivityDayRead(date=day.isoformat(), attempted=row["attempted"], correct=row["correct"]))
+
+    total_attempted = len(totals)
+    total_correct = sum(1 for attempt in totals if attempt.is_correct)
+    return ProgressStatsRead(
+        attempted=total_attempted,
+        correct=total_correct,
+        accuracy=round(total_correct / total_attempted, 3) if total_attempted else 0,
+        activity_streak=_activity_streak(by_day, today),
+        days=days,
+    )
 
 
 @router.get("/due", response_model=list[DueTopicRead])
@@ -30,6 +88,15 @@ def get_due_topics(
         )
         for mastery, topic in due_rows
     ]
+
+
+def _activity_streak(by_day: dict[date, dict[str, int]], today: date) -> int:
+    streak = 0
+    current = today
+    while by_day.get(current, {}).get("attempted", 0) > 0:
+        streak += 1
+        current -= timedelta(days=1)
+    return streak
 
 
 @router.get("/{topic_id}", response_model=MasteryRead)
