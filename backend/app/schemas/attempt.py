@@ -10,6 +10,12 @@ class AttemptCreate(BaseModel):
     submission_id: UUID | None = None
 
 
+class AttemptChoiceCreate(BaseModel):
+    selected_option: str = Field(min_length=1, max_length=500)
+    response_time_ms: int | None = Field(default=None, ge=0)
+    submission_id: UUID | None = None
+
+
 class AttemptRead(BaseModel):
     id: int
     user_id: int

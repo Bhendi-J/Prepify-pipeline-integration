@@ -236,6 +236,14 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
+  submitChoice(token: string, questionId: number, input: { selected_option: string; response_time_ms?: number; submission_id: string }) {
+    return request<AttemptResult>(`/api/v1/practice/${questionId}/choice`, {
+      token,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  },
   getDue(token: string) {
     return request<DueTopic[]>("/api/v1/progress/due", { token });
   },

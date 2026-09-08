@@ -229,6 +229,43 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(resolved.status_code, 201)
         self.assertEqual(self.client.get("/api/v1/progress/due", headers=headers).json(), [])
 
+    def test_multiple_choice_selection_is_graded_by_server(self) -> None:
+        owner = self._create_user()
+        topic, _ = self._create_topic_question(owner.id)
+        headers = self._auth_headers(owner.id)
+        with SessionLocal() as db:
+            question = Question(
+                topic_id=topic.id,
+                chunk_id=None,
+                question_text="What is stored by Redis?\nA) Images only\nB) Queue messages\nC) CSS files\nD) User passwords",
+                answer_text="B",
+                difficulty="easy",
+                question_type="multiple_choice",
+            )
+            db.add(question)
+            db.commit()
+            db.refresh(question)
+            question_id = question.id
+
+        missed = self.client.post(
+            f"/api/v1/practice/{question_id}/choice",
+            headers=headers,
+            json={"selected_option": "A"},
+        )
+        self.assertEqual(missed.status_code, 201)
+        self.assertFalse(missed.json()["is_correct"])
+        self.assertEqual(missed.json()["answer_text"], "B")
+        self.assertEqual(self.client.get("/api/v1/progress/due", headers=headers).json()[0]["topic_id"], topic.id)
+
+        correct = self.client.post(
+            f"/api/v1/practice/{question_id}/choice",
+            headers=headers,
+            json={"selected_option": "B"},
+        )
+        self.assertEqual(correct.status_code, 201)
+        self.assertTrue(correct.json()["is_correct"])
+        self.assertEqual(self.client.get("/api/v1/progress/due", headers=headers).json(), [])
+
     def test_upload_to_practice_flow(self) -> None:
         owner = self._create_user()
         headers = self._auth_headers(owner.id)

@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.database import db_session
 from app.models.user import User
 from app.repositories import attempt_repo, mastery_repo, question_repo, topic_repo
-from app.schemas.attempt import AttemptCreate, AttemptRead
+from app.schemas.attempt import AttemptChoiceCreate, AttemptCreate, AttemptRead
 from app.schemas.question import PracticeQuestionRequest, QuestionAnswer, QuestionCreate, QuestionPublic
 from app.services.adaptive_engine import sm2_update
 from app.services.question_gen import QuestionGenerationError, generate_question
@@ -204,6 +204,38 @@ def submit_attempt(
     )
 
 
+@router.post(
+    "/{question_id}/choice",
+    response_model=AttemptRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def submit_choice(
+    question_id: int,
+    choice_in: AttemptChoiceCreate,
+    db: db_session,
+    current_user: User = Depends(get_current_user),
+) -> AttemptRead:
+    question = question_repo.get_by_id(db, question_id, user_id=current_user.id)
+    if question is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Question not found",
+        )
+    selected = _normalize_choice(choice_in.selected_option)
+    expected = _normalize_choice(question.answer_text)
+    is_correct = selected == expected or selected in expected.split()[:1]
+    return submit_attempt(
+        question_id=question.id,
+        attempt_in=AttemptCreate(
+            is_correct=is_correct,
+            response_time_ms=choice_in.response_time_ms,
+            submission_id=choice_in.submission_id,
+        ),
+        db=db,
+        current_user=current_user,
+    )
+
+
 def _enforce_question_generation_limit(db: db_session, user_id: int) -> None:
     since = datetime.now(UTC) - timedelta(days=1)
     generated_count = question_repo.count_generated_since(db, user_id=user_id, since=since)
@@ -212,3 +244,15 @@ def _enforce_question_generation_limit(db: db_session, user_id: int) -> None:
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Daily question generation limit reached",
         )
+
+
+def _normalize_choice(value: str) -> str:
+    cleaned = value.strip().casefold()
+    if not cleaned:
+        return ""
+    first = cleaned[0]
+    if first in {"a", "b", "c", "d"}:
+        remainder = cleaned[1:].lstrip(").:- ")
+        if remainder or len(cleaned) == 1:
+            return first
+    return " ".join(cleaned.split())

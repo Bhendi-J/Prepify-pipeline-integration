@@ -113,6 +113,12 @@ form.pagination label { display: flex; align-items: center; gap: 12px; }
 .question-box, .answer-box { display: grid; gap: 20px; padding: 25px; border-radius: 12px; border: 1px solid #334258; background: #101923; }
 .question-box h3 { font-size: 1.2rem; letter-spacing: -.02em; }
 .question-box > button { justify-self: start; border-color: #52697b; }
+.choice-grid { display: grid; gap: 10px; }
+.choice { justify-content: flex-start; text-align: left; min-height: 54px; padding: 11px 13px; border-color: #33465c; background: #121c28; }
+.choice strong { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: #12291f; background: var(--accent); flex-shrink: 0; }
+.choice span { line-height: 1.5; }
+.choice.correct { border-color: #49a06f; background: #183427; }
+.choice.missed { border-color: #8b5260; background: #351f28; }
 .answer-box { background: #14271f; border-color: #325443; }
 .answer-box > strong { color: #a1dfbd; font-size: .78rem; letter-spacing: .03em; }
 .answer-box > p { font-size: .83rem; line-height: 1.7; }
