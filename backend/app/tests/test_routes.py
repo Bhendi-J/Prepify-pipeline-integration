@@ -98,6 +98,24 @@ class RouteTests(unittest.TestCase):
         delay.assert_called_once_with(body["id"])
         self.upload_paths.append(Path("uploads") / Path(body["file_path"]).name)
 
+    def test_documents_upload_accepts_pdf(self) -> None:
+        user = self._create_user()
+        headers = self._auth_headers(user.id)
+
+        with patch("app.api.v1.documents.process_document.delay") as delay:
+            response = self.client.post(
+                "/api/v1/documents/",
+                headers=headers,
+                data={"title": "PDF Notes", "source_type": "pdf"},
+                files={"file": ("notes.pdf", b"%PDF-1.4", "application/pdf")},
+            )
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["source_type"], ".pdf")
+        delay.assert_called_once_with(body["id"])
+        self.upload_paths.append(Path("uploads") / Path(body["file_path"]).name)
+
     def test_documents_delete_removes_owned_note_and_file(self) -> None:
         owner = self._create_user()
         intruder = self._create_user()

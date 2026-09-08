@@ -1,6 +1,7 @@
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 from app.services.ingestion import UnsupportedDocumentTypeError, chunk_text, extract_text
 
@@ -15,11 +16,25 @@ class IngestionTests(unittest.TestCase):
 
     def test_extract_text_rejects_unsupported_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "notes.pdf"
-            path.write_text("not actually a pdf", encoding="utf-8")
+            path = Path(temp_dir) / "notes.docx"
+            path.write_text("not supported", encoding="utf-8")
 
             with self.assertRaises(UnsupportedDocumentTypeError):
                 extract_text(str(path))
+
+    def test_extract_text_reads_pdf_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "notes.pdf"
+            path.write_bytes(b"%PDF-1.4")
+            first_page = Mock()
+            first_page.extract_text.return_value = "first page"
+            second_page = Mock()
+            second_page.extract_text.return_value = "second page"
+
+            with patch("app.services.ingestion.PdfReader") as reader:
+                reader.return_value.pages = [first_page, second_page]
+
+                self.assertEqual(extract_text(str(path)), "first page\n\nsecond page")
 
     def test_chunk_text_applies_overlap(self) -> None:
         chunks = chunk_text(

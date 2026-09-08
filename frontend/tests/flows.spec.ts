@@ -3,6 +3,7 @@ import { expect, Page, test } from "@playwright/test";
 const topics = [{ id: 1, user_id: 1, name: "Biology", parent_id: null }, { id: 2, user_id: 1, name: "Physics", parent_id: null }];
 const question = (id: number, topic_id = 1) => ({ id, topic_id, chunk_id: 1, source_chunk_ids: [1], question_text: `Question ${id}?`, difficulty: "medium", question_type: "short_answer" });
 const progress = (topic_id: number) => ({ user_id: 1, topic_id, ease_factor: 2.5, interval_days: 1, streak: 1, next_review_at: "2026-10-01T12:00:00Z" });
+const stats = { attempted: 5, correct: 4, accuracy: 80, activity_streak: 2, days: [] };
 const session = (id: number, count = 2) => ({ id, topic_id: 1, document_id: null as number | null, title: id === 1 ? "Earlier questions" : `Saved session ${id}`, focus: null, difficulty: "medium", question_type: "short_answer", is_legacy: id === 1, created_at: "2026-09-07T12:00:00Z", question_count: count });
 
 async function workspace(page: Page, status = "ready") {
@@ -22,6 +23,7 @@ async function workspace(page: Page, status = "ready") {
       state.documentReads += 1;
       return route.fulfill({ json: docs });
     }
+    if (path === "/api/v1/progress/stats") return route.fulfill({ json: stats });
     if (path === "/api/v1/progress/due") return route.fulfill({ json: topics.map((t) => ({ ...t, ...progress(t.id) })) });
     if (/\/progress\/\d+$/.test(path)) return route.fulfill({ json: progress(Number(path.split("/").pop())) });
     if (path === "/api/v1/study-sessions/") {
@@ -205,10 +207,10 @@ test("processing gates generation and polling enables it", async ({ page }) => {
   expect(state.documentReads).toBeGreaterThan(1);
 });
 
-test("upload clears the file input and prevents another submission", async ({ page }) => {
+test("upload accepts pdfs, clears the file input, and prevents another submission", async ({ page }) => {
   const state = await workspace(page); await openWorkspace(page);
   await page.getByRole("tab", { name: "Notes", exact: true }).click();
-  await page.locator('input[type="file"]').setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("Study notes") });
+  await page.locator('input[type="file"]').setInputFiles({ name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") });
   await page.getByRole("button", { name: "Upload", exact: true }).click();
   await expect(page.getByText(/Upload queued/)).toBeVisible();
   await expect(page.locator('input[type="file"]')).toHaveValue("");

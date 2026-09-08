@@ -186,7 +186,7 @@ export const api = {
   uploadDocument(token: string, input: { title: string; topic_id: number | null; file: File }) {
     const form = new FormData();
     form.set("title", input.title);
-    form.set("source_type", ".txt");
+    form.set("source_type", input.file.name.toLowerCase().endsWith(".pdf") ? ".pdf" : ".txt");
     if (input.topic_id !== null) {
       form.set("topic_id", String(input.topic_id));
     }

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+from pypdf import PdfReader
+
 
 class UnsupportedDocumentTypeError(ValueError):
     pass
@@ -14,10 +16,19 @@ class TextChunk:
 
 def extract_text(file_path: str) -> str:
     path = Path(file_path)
-    if path.suffix.lower() != ".txt":
-        raise UnsupportedDocumentTypeError("Only .txt uploads are supported for now")
+    suffix = path.suffix.lower()
+    if suffix == ".txt":
+        return path.read_text(encoding="utf-8")
+    if suffix == ".pdf":
+        return _extract_pdf_text(path)
 
-    return path.read_text(encoding="utf-8")
+    raise UnsupportedDocumentTypeError("Only .txt and .pdf uploads are supported")
+
+
+def _extract_pdf_text(path: Path) -> str:
+    reader = PdfReader(str(path))
+    pages = [page.extract_text() or "" for page in reader.pages]
+    return "\n\n".join(page.strip() for page in pages if page.strip())
 
 
 def chunk_text(

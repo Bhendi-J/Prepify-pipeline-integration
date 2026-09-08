@@ -25,6 +25,7 @@ router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
 UPLOAD_DIR = Path("uploads")  # directory to store uploaded files
 UPLOAD_DIR.mkdir(exist_ok=True)  # create the directory if it doesn't exist
+ALLOWED_UPLOAD_EXTENSIONS = {".txt", ".pdf"}
 
 @router.post("/", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 def create_document_endpoint(
@@ -36,10 +37,11 @@ def create_document_endpoint(
     file: UploadFile = File(...),
 ) -> DocumentRead:
     original_name = Path(file.filename or "upload.txt").name
-    if Path(original_name).suffix.lower() != ".txt":
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only .txt uploads are supported for now",
+            detail="Only .txt and .pdf uploads are supported",
         )
 
     _validate_topic_owner(db, topic_id, current_user.id)
@@ -51,7 +53,7 @@ def create_document_endpoint(
     # create a new document record in the database
     document_data = DocumentCreate(
         title=title,
-        source_type=source_type,
+        source_type=extension,
         file_path=str(file_path),
         topic_id=topic_id,
     )

@@ -12,7 +12,7 @@ type Props = { token: string; topicId: number; documents: DocumentItem[]; view: 
 
 export default function PracticePanel({ token, topicId, documents, view, selectedDocumentId, onDocument, onView, onBusy, onError, onRecorded }: Props) {
   const [query, setQuery] = useState("");
-  const [count, setCount] = useState(1);
+  const [count, setCount] = useState(3);
   const [difficulty, setDifficulty] = useState("medium");
   const [questionType] = useState("multiple_choice");
   const [active, setActive] = useState<SessionQuestions | null>(null);

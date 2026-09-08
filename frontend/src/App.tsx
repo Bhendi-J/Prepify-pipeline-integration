@@ -137,7 +137,8 @@ export default function App() {
   async function upload(event: FormEvent) {
     event.preventDefault();
     if (!token || topicId === null || !uploadFile) return;
-    if (!uploadFile.name.toLowerCase().endsWith(".txt") || uploadFile.size === 0) { showError(new Error("Choose a non-empty .txt file.")); return; }
+    const uploadName = uploadFile.name.toLowerCase();
+    if ((!uploadName.endsWith(".txt") && !uploadName.endsWith(".pdf")) || uploadFile.size === 0) { showError(new Error("Choose a non-empty .txt or .pdf file.")); return; }
     await run("upload", async (current) => {
       try {
         const row = await api.uploadDocument(token, { title: uploadTitle.trim() || uploadFile.name, topic_id: topicId, file: uploadFile });
@@ -193,10 +194,10 @@ export default function App() {
       {reader ? <DocumentReader key={`${token}:${reader.id}`} token={token} document={reader} onBack={() => setReaderId(null)} onPractice={() => practiceDocument(reader.id)} onError={showError} /> : <>
         {view === "notes" && <section className="panel">
           <div><h2>Your notes</h2><p className="muted">Open a document for its summary and paginated original, or practice just those notes.</p></div>
-          <form className="upload-form" onSubmit={upload}><input aria-label="Document title" placeholder="Document title" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} /><input ref={fileInput} type="file" accept=".txt" disabled={loading || !topicId} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /><button className="primary" disabled={loading || !topicId || !uploadFile}><Upload size={18} />Upload</button></form>
+          <form className="upload-form" onSubmit={upload}><input aria-label="Document title" placeholder="Document title" value={uploadTitle} onChange={(event) => setUploadTitle(event.target.value)} /><input ref={fileInput} type="file" accept=".txt,.pdf,application/pdf,text/plain" disabled={loading || !topicId} onChange={(event) => setUploadFile(event.target.files?.[0] ?? null)} /><button className="primary" disabled={loading || !topicId || !uploadFile}><Upload size={18} />Upload</button></form>
           <input placeholder="Filter notes by title" aria-label="Filter notes by title" value={notesFilter} onChange={(event) => { setNotesFilter(event.target.value); setNotesPage(1); }} />
           <div className="session-grid">{filteredNotes.slice((displayedNotesPage - 1) * 6, displayedNotesPage * 6).map((doc) => <article className="session-card" key={doc.id}><div className="card-top"><span className="card-icon"><FileText size={22} aria-hidden="true" /></span><span className={`status-pill status-${doc.status}`}>{doc.status}</span></div><h3>{doc.title}</h3><p className="muted">{doc.status === "failed" ? "Processing failed. Please re-upload the notes." : doc.status}</p><div className="actions"><button onClick={() => setReaderId(doc.id)}>Read notes</button><button disabled={doc.status !== "ready"} onClick={() => practiceDocument(doc.id)}>Practice these notes</button><button className="icon danger" title="Delete note" aria-label={`Delete ${doc.title}`} disabled={loading} onClick={() => void deleteNote(doc)}><Trash2 size={16} aria-hidden="true" /></button></div></article>)}</div>
-          {filteredNotes.length === 0 && <p className="empty-state">{notesFilter ? "No notes match this title." : "Upload a .txt file to get started."}</p>}
+          {filteredNotes.length === 0 && <p className="empty-state">{notesFilter ? "No notes match this title." : "Upload a .txt or .pdf file to get started."}</p>}
           {notePages > 1 && <div className="pagination"><button disabled={displayedNotesPage === 1} onClick={() => setNotesPage(displayedNotesPage - 1)}>Previous notes</button><span>Page {displayedNotesPage} of {notePages}</span><button disabled={displayedNotesPage === notePages} onClick={() => setNotesPage(displayedNotesPage + 1)}>Next notes</button></div>}
         </section>}
       </>}
